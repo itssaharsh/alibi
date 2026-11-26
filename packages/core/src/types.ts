@@ -60,6 +60,13 @@ export interface FlagEvaluation {
   identity: string;
 }
 
+/** One span of a judged request, kept so baseline rows can count requests through a span. */
+export interface SpanPoint {
+  name: string;
+  durationMs: number;
+  error: boolean;
+}
+
 /** The engine's reading of one finished request. */
 export interface TraceVerdict {
   traceId: string;
@@ -79,6 +86,8 @@ export interface TraceVerdict {
   counted: boolean;
   /** One sentence, generated from the origin spans, saying where it failed and why it does or does not count. */
   reason: string;
+  /** Every span of the request by name, so the baseline can compare the same span in stable traces. */
+  points?: SpanPoint[];
 }
 
 export interface RecoveryTolerance {
