@@ -48,3 +48,9 @@ storage_state*.json
 # working notes for the builder and his agents, kept on this machine
 /PROJECT_MEMORY.md
 /TASKS.md
+
+# design working files: references, concept mocks, the UI spec and QA screenshots
+/design/
+/UI-SPEC.md
+/prod-ui/
+/qa/
