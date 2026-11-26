@@ -1,0 +1,13 @@
+{
+  "name": "alibi",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A trace-aware kill switch for Flagsmith flags: it switches a flag off only when the feature's own code is failing.",
+  "license": "MIT",
+  "workspaces": ["packages/*", "apps/*", "load"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  }
+}
