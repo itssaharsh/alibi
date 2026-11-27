@@ -166,7 +166,7 @@ describe('the watch', () => {
     guard.confirmSwitchOff(at, true, 'ok');
     let recovered = false;
     for (let i = 1; i <= 50; i += 1) {
-      const t = at + i * 100;
+      const t = at + i * 1200;
       const events = guard.ingest(makeVerdict({ endMs: t, variation: STABLE, durationMs: 100, failed: i === 1, failureClass: 'server' }), t);
       recovered ||= types(events).includes('recovered');
     }
@@ -174,11 +174,41 @@ describe('the watch', () => {
   });
 
   it('recovery needs the minimum number of requests', () => {
-    const { guard, at, events } = afterSwitchOff(0, 85, 19);
+    const { guard, at } = crossed();
+    guard.confirmSwitchOff(at, true, 'ok');
+    for (let i = 1; i <= 19; i += 1) {
+      const t = at + i * 3000;
+      expect(types(guard.ingest(makeVerdict({ endMs: t, variation: STABLE, durationMs: 85 }), t))).toEqual(['verdict']);
+    }
+    expect(guard.tick(at + 60_000)).toEqual([]);
+    const t = at + 60_000;
+    expect(types(guard.ingest(makeVerdict({ endMs: t, variation: STABLE, durationMs: 85 }), t))).toEqual(['verdict', 'recovered']);
+  });
+
+  it('recovery needs the whole window to lie after the switch-off', () => {
+    const { guard, at, events } = afterSwitchOff(0, 85, 59);
     expect(types(events)).not.toContain('recovered');
-    const t = at + 20_000;
-    const twentieth = guard.ingest(makeVerdict({ endMs: t, variation: STABLE, durationMs: 85 }), t);
-    expect(types(twentieth)).toEqual(['verdict', 'recovered']);
+    const t = at + 60_000;
+    const events60 = guard.ingest(makeVerdict({ endMs: t, variation: STABLE, durationMs: 85 }), t);
+    expect(types(events60)).toEqual(['verdict', 'recovered']);
+    expect(guard.state.recoveredAtMs).toBe(at + 60_000);
+  });
+
+  it('twenty quick requests right after the switch-off do not latch a recovery before a slow host shows', () => {
+    const { guard, at } = crossed();
+    guard.confirmSwitchOff(at, true, 'ok');
+    for (let i = 1; i <= 20; i += 1) {
+      const t = at + i * 500;
+      guard.ingest(makeVerdict({ endMs: t, variation: STABLE, durationMs: 85 }), t);
+    }
+    expect(guard.state.recoveredAtMs).toBeUndefined();
+    for (let i = 1; i <= 290; i += 1) {
+      const t = at + 10_000 + i * 1000;
+      guard.ingest(makeVerdict({ endMs: t, variation: STABLE, durationMs: 400 }), t);
+    }
+    expect(guard.state.recoveredAtMs).toBeUndefined();
+    guard.tick(at + 300_000);
+    expect(guard.state.label).toBe('probably not the feature');
   });
 
   it('the recovery test looks only at the trailing window', () => {
@@ -197,6 +227,7 @@ describe('the watch', () => {
       recoveredAt ??= guard.state.recoveredAtMs;
     }
     expect(recoveredAt).toBeGreaterThan(at + 60_000);
+    expect(recoveredAt).toBe(at + 89_000);
   });
 
   it('reports recovery once and does not label before the watch ends', () => {

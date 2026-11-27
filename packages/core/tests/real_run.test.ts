@@ -18,6 +18,13 @@ describe.skipIf(!existsSync(file))('the recorded coupon-bug run from the live st
     expect(result.record?.label).toBe('probably the feature');
   });
 
+  it('recovers no earlier than the full window after the switch-off', () => {
+    const state = result.state;
+    expect((state.recoveredAtMs as number) - (state.switchedOffAtMs as number)).toBeGreaterThanOrEqual(60_000);
+    const line = result.timeline.find((e) => e.text.startsWith('Error rate and latency are back'));
+    console.log(Math.round(((state.recoveredAtMs as number) - result.header.startedAtMs) / 1000), line?.text);
+  });
+
   it('measures the stable level before the first counted failure', () => {
     expect(result.state.stableBaselineWindow).toBe('before-first-counted-failure');
     const off = result.state.switchedOffAtMs as number;

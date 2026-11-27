@@ -219,6 +219,9 @@ export class Guard {
     }
     if (s.recoveredAtMs !== undefined) return;
     const tolerance = s.config.tolerance;
+    // The whole window must lie after the switch-off, or the first quick requests could latch a pass
+    // before a slow host shows in them.
+    if (s.switchedOffAtMs === undefined || nowMs - s.switchedOffAtMs < tolerance.windowMs) return;
     const window = this.m.afterSwitchOff.filter((sample) => sample.t > nowMs - tolerance.windowMs);
     if (window.length < tolerance.minRequests) return;
     const rates = ratesOf(window);

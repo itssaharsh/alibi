@@ -68,7 +68,7 @@ export function describeEvent(event: GuardEvent, config: GuardConfig): TimelineE
         text: `Watch started for ${span(event.endsAtMs - event.atMs)}. ${stableLevelLabel(event.stableBaselineWindow)}: ${describeLevel(event.stableBaseline)}.`,
       };
     case 'recovered':
-      return { atMs: event.atMs, text: `Error rate and latency are back at the stable version's level: ${describeLevel(event.after)}.` };
+      return { atMs: event.atMs, text: `Error rate and latency are back at the stable version's level over the last ${Math.round(config.tolerance.windowMs / 1000)} seconds: ${describeLevel(event.after)}.` };
     case 'labelled':
       return {
         atMs: event.atMs,
