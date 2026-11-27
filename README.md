@@ -131,6 +131,17 @@ The command prints a summary when it ends. The recording of the run is written i
 
 **Flagsmith login.** The email is `admin@alibi.example`. The password is generated on your machine, the first time you start the stack: it is the `ADMIN_PASSWORD` line in `deploy/data/shared/secrets.env`. To see the experiment, open the organisation Alibi, the project `shop`, the environment `Development`, then **Experiments** and `checkout_v2 rollout`. After the switch-off, "Current rollout" there reads 0%. The experiment's results table fills when its **Refresh** button is pressed or when Alibi reads them, which it does ten seconds before the watch ends. Flagsmith allows one refresh every 5 minutes, so wait for the label before you press it yourself.
 
+### A flag that is not in an experiment
+
+Start the same example without any experiment. Part of the shoppers get the new checkout from plain flag evaluation (76 of 200 in our check, at a 50% variation weight):
+
+```bash
+ALIBI_EXAMPLE_MODE=plain docker compose -f deploy/docker-compose.yml up -d --build --wait
+node load/run.mjs coupon-bug
+```
+
+The run looks the same, except that Alibi **disables** the flag instead of setting a rollout to 0%, and the record has no Flagsmith experiment numbers. `node load/run.mjs reset` enables the flag again in this mode too.
+
 ### The other two scenarios
 
 ```bash
@@ -177,6 +188,7 @@ Take Flagsmith out and nothing is left. It decides who gets the feature, it is t
 | Experimentation: exposures and metrics | Alibi turns spans into exposure events and three metric events (`checkout_completed`, `flag_path_failure`, `checkout_latency_ms`). The shop has no tracking call of its own | `packages/guard/src/service.ts` (the events), `packages/guard/src/forwarder.ts` (the batches) |
 | Experiment rollout, through the Admin API | The switch. Alibi sets the experiment's rollout to 0%, then evaluates 20 identities and requires every one to get `stable` before it reports the switch-off | `packages/guard/src/flagsmith.ts` |
 | Experiment results | Flagsmith's own numbers per variation go into the investigation record | the record on the live page |
+| Plain flag, no experiment | When no experiment id is set, the switch is the flag itself: Alibi disables it in the environment, then evaluates 20 identities and requires every one to get `stable`, as before. It sends no exposures or metric events and reads no experiment numbers, and the state says so. Not available on environments that use feature versioning (v2) | `packages/guard/src/flagsmith.ts` |
 | Feature Health (beta) | After a confirmed switch-off Alibi marks the flag **unhealthy** through a webhook provider, with the count, the most common reason and the switch-off; after the watch it posts again with the label. It never marks the flag healthy, because a person has not looked yet. On self-hosted 2.295.2 this is readable through the API (`GET /api/v1/projects/<id>/feature-health/events/`); the dashboard does not show it | `packages/guard/src/service.ts`, `deploy/bootstrap/bootstrap.sh` |
 
 In the coupon run, Flagsmith's engine, fed only from spans, gave the new checkout a 0.013% chance of beating the stable one on completed checkouts (89.1% against 100%; lift −10.9%, interval −16.8% to −5.1%). In the outage run it could not tell them apart (70.2% against 75.9%, 11% chance), which is the right answer: nothing was wrong with the feature.
@@ -217,7 +229,7 @@ The attribute names follow OpenTelemetry's feature-flag semantic conventions, wh
 
 ## Use it with your own service
 
-To try it against a Flagsmith you already have, `deploy/attach/` starts only Alibi and its board, configured by a few environment variables; its README lists what must exist in your Flagsmith. The collector side is one more exporter:
+To try it against a Flagsmith you already have, `deploy/attach/` starts only Alibi and its board, configured by a few environment variables; its README lists what must exist in your Flagsmith. Your flag does not have to be in an experiment: with an experiment id, Alibi sets the experiment's rollout to 0% and puts Flagsmith's own numbers in the record; without one, it disables the flag in the environment and the record has no experiment numbers. The collector side is one more exporter:
 
 ```yaml
 exporters:

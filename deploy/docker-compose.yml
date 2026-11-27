@@ -110,6 +110,8 @@ services:
   bootstrap:
     build: ./bootstrap
     restart: "no"
+    environment:
+      ALIBI_EXAMPLE_MODE: ${ALIBI_EXAMPLE_MODE:-experiment}
     volumes:
       - ./data/shared:/shared
     depends_on:

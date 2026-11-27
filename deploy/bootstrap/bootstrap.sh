@@ -23,6 +23,14 @@ set +a
 
 say() { echo "bootstrap: $*"; }
 
+# ALIBI_EXAMPLE_MODE=plain sets the example up with a flag that is NOT in an experiment: half of the shoppers get the new
+# variation from plain flag evaluation, and there are no metrics, no experiment and no warehouse connection.
+MODE=${ALIBI_EXAMPLE_MODE:-experiment}
+case "$MODE" in experiment|plain) ;; *) echo "bootstrap: ALIBI_EXAMPLE_MODE must be experiment or plain" >&2; exit 1 ;; esac
+ALLOCATION=0
+[ "$MODE" != plain ] || ALLOCATION=50
+M_COMPLETED=""; M_FAILURE=""; M_LATENCY=""; EXPERIMENT_ID=""
+
 # call METHOD PATH [JSON BODY] prints the response body and fails on a non-2xx status.
 call() {
   local method=$1 path=$2 body=${3:-} out status
@@ -98,9 +106,10 @@ fi
 OPTION_ID=$(call GET "projects/$PROJECT_ID/features/$FEATURE_ID/mv-options/" | items | jq -r --arg k "$VARIATION" '[.[] | select(.key == $k)][0].id // empty')
 if [ -z "$OPTION_ID" ]; then
   OPTION_ID=$(call POST "projects/$PROJECT_ID/features/$FEATURE_ID/mv-options/" \
-    "$(jq -n --arg k "$VARIATION" --argjson f "$FEATURE_ID" '{feature:$f,type:"unicode",string_value:$k,key:$k,default_percentage_allocation:0}')" | jq -r .id)
+    "$(jq -n --arg k "$VARIATION" --argjson f "$FEATURE_ID" --argjson a "$ALLOCATION" '{feature:$f,type:"unicode",string_value:$k,key:$k,default_percentage_allocation:$a}')" | jq -r .id)
 fi
 
+if [ "$MODE" = experiment ]; then
 say "warehouse connection"
 if [ "$(call GET "environments/$ENV_KEY/warehouse-connections/" | items | jq length)" = 0 ]; then
   call POST "environments/$ENV_KEY/warehouse-connections/" \
@@ -153,6 +162,8 @@ if [ "$(call GET "environments/$ENV_KEY/experiments/$EXPERIMENT_ID/" | jq -r .st
   call POST "environments/$ENV_KEY/experiments/$EXPERIMENT_ID/start/" > /dev/null
 fi
 
+fi
+
 # Feature Health (beta): a webhook provider lets Alibi mark the flag unhealthy, with its reason, after a switch-off.
 # Flagsmith answers with a secret address; Alibi gets its path, on the address it uses for everything else.
 # A Flagsmith without the feature just leaves this out and Alibi runs without it.
@@ -178,14 +189,15 @@ EOF
 jq -n --arg u http://127.0.0.1:8000 --arg i http://flagsmith:8000 --arg ek "$ENV_KEY" --arg sk "$SERVER_KEY" --arg mk "$MASTER_KEY" \
   --arg flag "$FLAG" --arg stable "$STABLE" --arg variation "$VARIATION" \
   --argjson org "$ORG_ID" --argjson project "$PROJECT_ID" --argjson feature "$FEATURE_ID" \
-  --argjson option "$OPTION_ID" --argjson experiment "$EXPERIMENT_ID" \
-  --argjson m1 "$M_COMPLETED" --argjson m2 "$M_FAILURE" --argjson m3 "$M_LATENCY" --arg hp "$HEALTH_PATH" '{
+  --argjson option "$OPTION_ID" --arg experiment "$EXPERIMENT_ID" --arg mode "$MODE" \
+  --arg m1 "$M_COMPLETED" --arg m2 "$M_FAILURE" --arg m3 "$M_LATENCY" --arg hp "$HEALTH_PATH" '{
     url: $u, internalUrl: $i, environmentKey: $ek, serverKey: $sk, masterKey: $mk,
     organisationId: $org, projectId: $project, flag: $flag, featureId: $feature,
-    stableVariation: $stable, variation: $variation, variationOptionId: $option,
-    experimentId: $experiment,
-    metrics: {checkout_completed: $m1, flag_path_failure: $m2, checkout_latency_ms: $m3}
-  } + (if $hp != "" then {featureHealthUrl: ($i + $hp)} else {} end)' > "$SHARED/flagsmith.json.tmp"
+    stableVariation: $stable, variation: $variation, variationOptionId: $option, mode: $mode
+  } + (if $experiment != "" then {
+    experimentId: ($experiment | tonumber),
+    metrics: {checkout_completed: ($m1 | tonumber), flag_path_failure: ($m2 | tonumber), checkout_latency_ms: ($m3 | tonumber)}
+  } else {} end) + (if $hp != "" then {featureHealthUrl: ($i + $hp)} else {} end)' > "$SHARED/flagsmith.json.tmp"
 chmod 644 "$SHARED"/flagsmith.env.tmp "$SHARED"/flagsmith.json.tmp
 mv "$SHARED/flagsmith.env.tmp" "$SHARED/flagsmith.env"
 mv "$SHARED/flagsmith.json.tmp" "$SHARED/flagsmith.json"

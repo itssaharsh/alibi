@@ -19,3 +19,12 @@ Each row is one run of a scenario at 2 requests a second from a fresh stack (Fla
 | degraded-host | 3 | 20 flagged-path | 1 server | 16 | +1:50 | never | probably not the feature | +1:38 | +1:38 | 99 points | 0 / 0.2325 | true |
 | degraded-host | 4 | 20 flagged-path, 1 dependency, 1 mixed | 0 | 16 | +1:52 | never | probably not the feature | +1:41 | +1:39 | 100 points | 0 / 0.0727 | true |
 | degraded-host | 5 | 20 flagged-path, 1 server | 0 | 16 | +1:51 | never | probably not the feature | +1:38 | +1:38 | 100 points | 0.0001 / 0.1056 | true |
+
+## Without an experiment (plain flag)
+
+The same scenarios against a flag that is not in an experiment (the example started with `ALIBI_EXAMPLE_MODE=plain`): Alibi disables the flag instead of setting a rollout to 0%, sends no experiment events and reads no experiment numbers. One run each, at 2 requests a second from a fresh stack.
+
+| Scenario | Flag-on failures | Stable failures | Counted | Disabled | Recovered | Label | Plain rule | Arm comparison | Largest arm gap | Replay = live |
+|---|---|---|---|---|---|---|---|---|---|---|
+| coupon-bug | 16 flagged-path | 0 | 16 | +2:32 | +3:32 | probably the feature | +1:49 | +1:49 | 33.3 points | true |
+| outage | 89 dependency | 90 dependency | 0 | never | never | none | +1:10 | +1:10 | 7.6 points | true |

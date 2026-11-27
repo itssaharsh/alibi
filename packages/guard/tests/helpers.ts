@@ -78,6 +78,10 @@ export class FakeFlagsmith {
   url = '';
   /** True once the experiment's rollout has been set to 0%. */
   rolloutZero = false;
+  /** True once the flag itself has been disabled (a flag that is not in an experiment). */
+  featureDisabled = false;
+  /** The environment uses feature versioning (v2). */
+  versioningV2 = false;
   /** Close every connection without answering. */
   down = false;
   /** Statuses to answer the next event posts with, one each, before accepting. */
@@ -171,10 +175,26 @@ export class FakeFlagsmith {
       if (!sdk) return { status: 403, body: { detail: 'Invalid or missing Environment key' } };
       const id = url.searchParams.get('identifier') ?? '';
       const hash = [...id].reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-      const value = !this.rolloutZero || this.patchHasNoEffect ? (hash % 2 === 0 ? 'v2' : 'stable') : 'stable';
-      return { status: 200, body: { identifier: id, flags: [{ feature: { id: 3, name: 'checkout_v2' }, enabled: true, feature_state_value: value }] } };
+      const served = !this.rolloutZero && !this.featureDisabled;
+      const value = served || this.patchHasNoEffect ? (hash % 2 === 0 ? 'v2' : 'stable') : 'stable';
+      const enabled = !this.featureDisabled || this.patchHasNoEffect;
+      return { status: 200, body: { identifier: id, flags: [{ feature: { id: 3, name: 'checkout_v2' }, enabled, feature_state_value: value }] } };
     }
     if (!admin) return { status: 403, body: { detail: 'Authentication credentials were not provided.' } };
+    if (path === `${env}/` && method === 'GET') return { status: 200, body: { api_key: ENV_KEY, use_v2_feature_versioning: this.versioningV2 } };
+    if (path === `${env}/featurestates/` && method === 'GET') {
+      return { status: 200, body: { count: 1, results: [{ id: 7, feature: 3, enabled: !this.featureDisabled, identity: null, feature_segment: null }] } };
+    }
+    if (path === `${env}/featurestates/7/` && method === 'PATCH') {
+      if (this.leakKey) return { status: 403, body: { detail: `Invalid key ${ADMIN_KEY} for ${ENV_KEY}` } };
+      if (this.patchFailures > 0) {
+        this.patchFailures -= 1;
+        return { status: 503, body: { detail: 'unavailable' } };
+      }
+      this.patches += 1;
+      this.featureDisabled = (body as { enabled: boolean }).enabled === false;
+      return { status: 200, body: { id: 7, feature: 3, enabled: !this.featureDisabled } };
+    }
     if (path === `${env}/experiments/1/` && method === 'GET') {
       return {
         status: 200,

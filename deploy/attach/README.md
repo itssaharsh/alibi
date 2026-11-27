@@ -4,10 +4,20 @@ This starts only Alibi and its live board. Everything else is yours: your Flagsm
 
 ## What must already exist
 
-1. **A multivariate flag with keyed variations**, for example `checkout_v2` with the value `stable` and a variation whose key and value are both `v2`. The flag's own value is what your service reads. The variation that is the previous stable version is the experiment's control.
-2. **An experiment on that flag**, running. Alibi switches the flag off by setting the experiment's rollout to 0%, because on Flagsmith 2.295.2 disabling a flag that is in a running experiment does not change what anyone receives. Its id is the number in the experiment's address.
-3. **Three metrics on the experiment, if you want Flagsmith's own numbers in the record**: `checkout_completed` (occurrence, up), `flag_path_failure` (occurrence, down) and `checkout_latency_ms` (mean, down). Alibi sends these events from your spans. Without them Alibi still works; the record just has no Flagsmith numbers.
-4. **For self-hosted Flagsmith, a warehouse connection** of type "Flagsmith database" in the environment (Experimentation needs it to store events), and `EXPERIMENTATION_ENABLED=true` on the Flagsmith server.
+1. **A flag with keyed variations**, for example `checkout_v2` with the value `stable` and a variation whose key and value are both `v2`. Your service reads the flag's string value. Part of your traffic must keep getting the stable value, because recovery after a switch-off is measured against the requests that got the stable version.
+2. **Either an experiment on that flag, or no experiment.** Alibi picks the way to switch off from `FLAGSMITH_EXPERIMENT_ID`:
+
+   | | With an experiment (set `FLAGSMITH_EXPERIMENT_ID`) | Without one (leave it empty) |
+   |---|---|---|
+   | The switch-off | Sets the experiment's rollout to 0%. (On Flagsmith 2.295.2, disabling a flag that is in a running experiment does not change what anyone receives, so the rollout is the switch.) | Disables the flag in the environment. The service's helper then returns its fallback, the stable value |
+   | Confirmation | 20 identities are evaluated; every one must get `stable` | the same |
+   | Experiment events | Exposures and the three metric events are sent from your spans | None are sent |
+   | Flagsmith's own numbers | Read before the watch ends and put in the record | None; the state says why |
+   | Feature Health | Posted when configured | the same |
+
+   `ALIBI_SWITCH_OFF=rollout-zero` or `disable-feature` overrides the choice. Disabling needs the flag's name (`ALIBI_FLAG`) or its id (`FLAGSMITH_FEATURE_ID`). It does not work on an environment that uses Flagsmith's feature versioning (v2); the board then says so and the switch-off stays unconfirmed.
+3. **With an experiment only: three metrics on it, if you want Flagsmith's numbers in the record**: `checkout_completed` (occurrence, up), `flag_path_failure` (occurrence, down) and `checkout_latency_ms` (mean, down). Alibi sends these events from your spans. Without them Alibi still works; the record just has no Flagsmith numbers.
+4. **With an experiment on self-hosted Flagsmith, a warehouse connection** of type "Flagsmith database" in the environment (Experimentation needs it to store events), and `EXPERIMENTATION_ENABLED=true` on the Flagsmith server.
 5. **A master API key**, and the environment's client-side key.
 
 Optional: a Feature Health webhook (Project Settings, Feature Health, create a Webhook provider). Put its address in `FLAGSMITH_FEATURE_HEALTH_URL` and Alibi marks the flag unhealthy, with the reason, after a switch-off. It never marks it healthy.
@@ -30,8 +40,8 @@ To see this setup work without a Flagsmith of your own, use the example stack's 
 docker compose -f deploy/docker-compose.yml stop alibi board
 cd deploy/attach
 # .env: FLAGSMITH_API_URL=http://flagsmith:8000, the environment key and master key from
-# deploy/data/shared/flagsmith.json (environmentKey, masterKey), FLAGSMITH_EXPERIMENT_ID (experimentId),
-# ALIBI_FLAG=checkout_v2, ALIBI_STABLE_VARIATION=stable
+# deploy/data/shared/flagsmith.json (environmentKey, masterKey), FLAGSMITH_EXPERIMENT_ID (experimentId; leave it
+# empty if you started the example with ALIBI_EXAMPLE_MODE=plain), ALIBI_FLAG=checkout_v2, ALIBI_STABLE_VARIATION=stable
 docker compose -f docker-compose.yml -f example-stack.yml up -d --build --wait
 node ../../load/run.mjs coupon-bug
 ```
@@ -59,7 +69,7 @@ Use the host name that reaches Alibi from your collector (`localhost:4319` if th
 
 ## When something is missing
 
-- Alibi will not start without `FLAGSMITH_API_URL`, `FLAGSMITH_ENVIRONMENT_KEY`, `FLAGSMITH_ADMIN_KEY`, `FLAGSMITH_EXPERIMENT_ID`; Compose stops first and names the one that is missing. A value that is not usable is named in one line, for example `PORT must be a whole number above 0`.
+- Alibi will not start without `FLAGSMITH_API_URL`, `FLAGSMITH_ENVIRONMENT_KEY`, `FLAGSMITH_ADMIN_KEY`, `ALIBI_FLAG` and `ALIBI_STABLE_VARIATION`; Compose stops first and names the one that is missing. With `ALIBI_SWITCH_OFF=rollout-zero` it also needs `FLAGSMITH_EXPERIMENT_ID`. A value that is not usable is named in one line, for example `PORT must be a whole number above 0`.
 - If Flagsmith cannot be reached or refuses the rollout change, the board says **switch-off not confirmed** with Flagsmith's answer and Alibi tries again. It never reports a switch-off that an evaluation of 20 identities did not confirm.
-- If the metrics or the experiment results are missing, the record is written without Flagsmith's numbers.
+- If the metrics or the experiment results are missing, or there is no experiment, the record is written without Flagsmith's numbers.
 - `GET http://127.0.0.1:4319/api/state` shows what Alibi sees: spans received, events sent to Flagsmith and how many it accepted, and the switch-off state.

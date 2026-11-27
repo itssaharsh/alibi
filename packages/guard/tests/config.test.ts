@@ -30,7 +30,7 @@ describe('configuration', () => {
     expect(reason({ ...base, FLAGSMITH_API_URL: '' })).toBe('FLAGSMITH_API_URL is missing (set it, or provide "internalUrl" in /shared/flagsmith.json)');
     expect(reason({ FLAGSMITH_API_URL: 'http://f' })).toContain('FLAGSMITH_ENVIRONMENT_KEY is missing');
     expect(reason({ FLAGSMITH_API_URL: 'http://f', FLAGSMITH_ENVIRONMENT_KEY: 'k' })).toContain('FLAGSMITH_ADMIN_KEY is missing');
-    expect(reason({ ...base, FLAGSMITH_EXPERIMENT_ID: '' })).toContain('FLAGSMITH_EXPERIMENT_ID is missing');
+    expect(reason({ ...base, FLAGSMITH_EXPERIMENT_ID: '', ALIBI_SWITCH_OFF: 'rollout-zero' })).toContain('FLAGSMITH_EXPERIMENT_ID is missing');
     for (const message of [reason({ FLAGSMITH_API_URL: 'http://f' })]) expect(message).not.toContain('\n');
   });
 
@@ -70,7 +70,7 @@ describe('configuration', () => {
   it('rejects values it cannot use', () => {
     expect(reason({ ...base, ALIBI_THRESHOLD: 'many' })).toContain('ALIBI_THRESHOLD');
     expect(reason({ ...base, PORT: '0' })).toBe('PORT must be a whole number above 0');
-    expect(reason({ ...base, ALIBI_SWITCH_OFF: 'explode' })).toBe('ALIBI_SWITCH_OFF must be one of: rollout-zero');
+    expect(reason({ ...base, ALIBI_SWITCH_OFF: 'explode' })).toBe('ALIBI_SWITCH_OFF must be one of: rollout-zero, disable-feature');
     expect(reason({ ...base, ALIBI_RULES: '/missing.json' })).toBe('/missing.json cannot be read');
   });
 

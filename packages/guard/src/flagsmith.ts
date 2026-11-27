@@ -65,7 +65,7 @@ function networkReason(error: unknown): string {
 /** Everything the guard asks of Flagsmith, so tests and the service share one place. */
 export class FlagsmithApi {
   private metricNames: Map<number, string> | undefined;
-  private latestExperimentId: number;
+  private latestExperimentId: number | undefined;
 
   constructor(
     readonly settings: FlagsmithSettings,
@@ -188,14 +188,45 @@ export class FlagsmithApi {
    */
   async experimentId(): Promise<number> {
     const { experimentId, experimentPinned, bootstrapFile } = this.settings;
-    if (experimentPinned) return experimentId;
+    if (experimentPinned) return experimentId as number;
     try {
       const fresh = (JSON.parse(await readFile(bootstrapFile, 'utf8')) as Json).experimentId;
       if (typeof fresh === 'number') this.latestExperimentId = fresh;
     } catch {
       // the file is unreadable for a moment: keep the last id that was known
     }
-    return this.latestExperimentId;
+    return this.latestExperimentId as number;
+  }
+
+  /**
+   * Disables the flag itself in the environment, for a flag that is not in an experiment. Environments that use feature
+   * versioning (v2) need a different set of calls, which Alibi does not make, so that case is refused in plain words.
+   */
+  async disableFeature(): Promise<void> {
+    const environment = await this.request('GET', `/api/v1/environments/${encodeURIComponent(this.settings.environmentKey)}/`, { admin: true });
+    if (environment.status !== 200) throw this.failure('Flagsmith environment', environment);
+    if (isRecord(environment.body) && environment.body.use_v2_feature_versioning === true) {
+      throw new FlagsmithError('this Flagsmith environment uses feature versioning (v2), and Alibi cannot change the flag there yet', false);
+    }
+    const { featureId } = this.settings;
+    const filter = featureId === undefined ? `feature_name=${encodeURIComponent(this.guarded.flag)}` : `feature=${featureId}`;
+    const list = await this.request('GET', `${this.env('featurestates/')}?${filter}`, { admin: true });
+    if (list.status !== 200) throw this.failure('Flagsmith feature states', list);
+    const items = Array.isArray(list.body) ? list.body : isRecord(list.body) && Array.isArray(list.body.results) ? list.body.results : [];
+    const own = items.find(
+      (item): item is Json =>
+        isRecord(item) &&
+        (item.identity === null || item.identity === undefined) &&
+        (item.feature_segment === null || item.feature_segment === undefined) &&
+        (featureId === undefined || item.feature === featureId),
+    );
+    const id = num(own?.id);
+    if (id === undefined) throw new FlagsmithError('Flagsmith has no feature state for the flag in this environment', false);
+    const reply = await this.request('PATCH', this.env(`featurestates/${id}/`), { admin: true, body: { enabled: false } });
+    if (reply.status !== 200) throw this.failure('Flagsmith feature state update', reply);
+    if (!isRecord(reply.body) || reply.body.enabled !== false) {
+      throw new FlagsmithError('Flagsmith answered the update but the flag is not shown as disabled', false);
+    }
   }
 
   /**
@@ -331,6 +362,11 @@ export function summariseResults(
 }
 
 const strategies: Record<SwitchOffStrategy, (api: FlagsmithApi) => Promise<string>> = {
+  /** For a flag that is not in an experiment: disabling it makes every identity get the service's fallback, the stable version. */
+  async 'disable-feature'(api) {
+    await api.disableFeature();
+    return 'disabled';
+  },
   /** Setting the experiment's rollout to 0% is what makes every identity evaluate to the stable value. */
   async 'rollout-zero'(api) {
     await api.setRolloutToZero();

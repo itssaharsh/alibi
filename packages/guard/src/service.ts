@@ -33,6 +33,8 @@ const EVENTS_LINE_EVERY_TICKS = 30;
 const PERSIST_DELAY_MS = 1000;
 /** Flagsmith compares every variant with the one whose key is exactly `control`, so the stable version is sent under that key. */
 const CONTROL_VARIANT = 'control';
+/** Said in the state and the run file for a flag that is not in an experiment. */
+const NO_EXPERIMENT_NOTE = 'No experiment is configured, so the flag is disabled instead of its rollout set to 0%, no exposure or metric events are sent, and no experiment numbers are read.';
 const END_READ_LEAD_MS = 10000;
 const REFRESH_MARGIN_MS = 1000;
 const SWITCH_OFF_BACKOFF_MS = [1000, 2000, 4000, 8000, 15000];
@@ -66,7 +68,7 @@ export interface SwitchOffView {
 
 export interface StatePayload {
   state: GuardState;
-  flagsmith: { forwarded: ForwardCounters; /** Set once the rollout is 0%: no more exposures or metrics are sent. */ forwardingStoppedAtMs?: number; /** Feature Health: the flag is marked unhealthy after a switch-off. Absent when Flagsmith has no such webhook. */ featureHealth?: { posts: number; lastPostedAtMs?: number; lastProblem?: string }; switchOff: SwitchOffView; results?: FlagsmithExperimentSummary };
+  flagsmith: { mode: 'experiment' | 'plain-flag'; /** In plain words, when the flag is not in an experiment. */ note?: string; forwarded: ForwardCounters; /** Set once the rollout is 0%: no more exposures or metrics are sent. */ forwardingStoppedAtMs?: number; /** Feature Health: the flag is marked unhealthy after a switch-off. Absent when Flagsmith has no such webhook. */ featureHealth?: { posts: number; lastPostedAtMs?: number; lastProblem?: string }; switchOff: SwitchOffView; results?: FlagsmithExperimentSummary };
   /** The last 200 verdicts that failed or had the flag on. */
   recent?: TraceVerdict[];
   timeline: TimelineEntry[];
@@ -323,7 +325,7 @@ export class AlibiService {
     const group = verdict.evaluation ? (verdict.flagOn ? this.window.flagOn : this.window.stable) : this.window.unflagged;
     group.durations.push(verdict.durationMs);
     if (verdict.failed) group.failures += 1;
-    if (verdict.evaluation && this.forwardingStoppedAtMs === undefined) this.forwarder.add(this.eventsFor(verdict, verdict.evaluation.identity));
+    if (verdict.evaluation && this.config.flagsmith.experimentMode && this.forwardingStoppedAtMs === undefined) this.forwarder.add(this.eventsFor(verdict, verdict.evaluation.identity));
   }
 
   private remember(verdict: TraceVerdict): void {
@@ -501,11 +503,15 @@ export class AlibiService {
           // "not in the experiment" and track nothing. Flagsmith sets aside identities seen in more than one variant,
           // so exposures and metrics after this point would shrink the new version's arm. Events queued before this
           // moment are still sent; requests keep feeding the rule, the watch and the recording.
-          this.forwardingStoppedAtMs = now;
+          if (this.config.flagsmith.experimentMode) this.forwardingStoppedAtMs = now;
           this.emit(this.guard.confirmSwitchOff(now, true, detail));
           this.markUnhealthy(detail, undefined);
-          this.endReadPending = true;
-          this.scheduleEndRead();
+          if (this.config.flagsmith.experimentMode) {
+            this.endReadPending = true;
+            this.scheduleEndRead();
+          } else {
+            this.note({ kind: 'flagsmith', atMs: this.stamp(), what: 'results', ok: false, detail: NO_EXPERIMENT_NOTE });
+          }
           return;
         }
         reason = `${check.checked - check.stable} of ${check.checked} identities checked still get the new version`;
@@ -600,7 +606,7 @@ export class AlibiService {
     const generation = this.generation;
     let resultsRead = false;
     await this.forwarder.flush();
-    if (this.guard.phase === 'armed') {
+    if (this.guard.phase === 'armed' && this.config.flagsmith.experimentMode) {
       for (let attempt = 0; attempt < 2 && !resultsRead && generation === this.generation; attempt += 1) {
         const wait = this.lastRefreshAtMs === undefined ? 0 : this.lastRefreshAtMs + 300000 + REFRESH_MARGIN_MS - this.clock.now();
         if (wait > 0) await sleep(this.clock, wait);
@@ -632,6 +638,8 @@ export class AlibiService {
     const payload: StatePayload = {
       state,
       flagsmith: {
+        mode: this.config.flagsmith.experimentMode ? 'experiment' : 'plain-flag',
+        ...(this.config.flagsmith.experimentMode ? {} : { note: NO_EXPERIMENT_NOTE }),
         forwarded: this.forwarder.totals,
         ...(this.forwardingStoppedAtMs === undefined ? {} : { forwardingStoppedAtMs: this.forwardingStoppedAtMs }),
         ...(this.config.flagsmith.featureHealthPath === undefined ? {} : { featureHealth: this.health }),

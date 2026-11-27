@@ -328,8 +328,8 @@ async function runScenario(name, args) {
  *  1. removes the CPU limit from the shop,
  *  2. starts the shop database if it is stopped,
  *  3. runs the bootstrap again, which creates a new experiment when the old one was completed,
- *  4. makes sure the experiment is running, serves the new checkout to 50% of shoppers (rollout 100%),
- *     and the flag's feature state is on.
+ *  4. makes sure the experiment (when there is one) is running and serves the new checkout to 50% of shoppers
+ *     (rollout 100%), and the flag's feature state is on.
  * Events already stored in Flagsmith's experiment results are not removed; the API has no call for that.
  */
 async function reset() {
@@ -338,7 +338,9 @@ async function reset() {
   await compose('start', 'shop-db');
   await waitUntilHealthy('shop-db');
   console.log('Shop database is running.');
-  await compose('run', '--rm', 'bootstrap');
+  // The bootstrap runs in the mode the stack was started in (ALIBI_EXAMPLE_MODE), which it wrote to flagsmith.json.
+  const mode = JSON.parse(readFileSync(FLAGSMITH_JSON, 'utf8')).mode ?? 'experiment';
+  await compose('run', '--rm', '-e', `ALIBI_EXAMPLE_MODE=${mode}`, 'bootstrap');
 
   const f = JSON.parse(readFileSync(FLAGSMITH_JSON, 'utf8'));
   const api = async (method, path, body) => {
@@ -350,19 +352,24 @@ async function reset() {
     if (!res.ok) throw new Error(`${method} ${path} answered ${res.status}: ${(await res.text()).slice(0, 300)}`);
     return res.status === 204 ? null : res.json();
   };
-  const experiment = `environments/${f.environmentKey}/experiments/${f.experimentId}`;
-
-  if ((await api('GET', `${experiment}/`)).status === 'paused') await api('POST', `${experiment}/start/`);
-  await api('PATCH', `${experiment}/rollout/`, {
-    enabled: true,
-    rollout_percentage: 100,
-    feature_state_value: { type: 'string', value: f.stableVariation },
-    multivariate_feature_state_values: [{ multivariate_feature_option: f.variationOptionId, percentage_allocation: 50 }],
-  });
+  if (f.experimentId !== undefined) {
+    const experiment = `environments/${f.environmentKey}/experiments/${f.experimentId}`;
+    if ((await api('GET', `${experiment}/`)).status === 'paused') await api('POST', `${experiment}/start/`);
+    await api('PATCH', `${experiment}/rollout/`, {
+      enabled: true,
+      rollout_percentage: 100,
+      feature_state_value: { type: 'string', value: f.stableVariation },
+      multivariate_feature_state_values: [{ multivariate_feature_option: f.variationOptionId, percentage_allocation: 50 }],
+    });
+  }
   const states = await api('GET', `environments/${f.environmentKey}/featurestates/?feature=${f.featureId}`);
   const featureState = (states.results ?? states)[0];
   await api('PATCH', `environments/${f.environmentKey}/featurestates/${featureState.id}/`, { enabled: true });
-  console.log(`Flag ${f.flag} is on and experiment ${f.experimentId} serves ${f.variation} to half of the shoppers.`);
+  console.log(
+    f.experimentId === undefined
+      ? `Flag ${f.flag} is enabled and serves ${f.variation} to half of the shoppers (no experiment).`
+      : `Flag ${f.flag} is on and experiment ${f.experimentId} serves ${f.variation} to half of the shoppers.`,
+  );
 }
 
 // ---------------------------------------------------------------- main
