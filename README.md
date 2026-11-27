@@ -28,11 +28,13 @@ These ran on a real stack: self-hosted Flagsmith 2.295.2, a shop instrumented wi
 
 In the slow-host run the rule did what it says: the feature's own code was failing, so the flag went off. The five-minute watch is how Alibi found out the feature was probably not why.
 
+![The slow host: switched off, latency still eight times the stable level, labelled probably not the feature](docs/img/slow-host.png)
+
 ![The coupon bug at the moment the counter passes 15](docs/img/coupon-switch.png)
 
 ## For judges: see it in under a minute
 
-1. Open https://itssaharsh.github.io/alibi/. The first screen is the database outage, already finished: 0 of 97 counted, the flag stays on. Click any tag to see that request's spans and the reason.
+1. Open https://itssaharsh.github.io/alibi/. The first screen is the database outage, already finished: 0 of 97 counted, the flag stays on. Click any tag to see that request's spans and the reason. It works on a phone too ([screenshot](docs/img/phone.png)).
 2. Press **Replay the database outage**, or pick **The coupon bug** and jump to "The counter passes 15". Two more runs show where a simple rule goes wrong: **The feature's own service goes down** and **The rare bug**.
 3. Or replay a run in your terminal. This needs Node 22 and nothing else:
 
@@ -100,9 +102,9 @@ The second command sends two shop requests a second for 9 minutes. Open the boar
 |---|---|
 | 0:00 | Healthy traffic. About half of the shoppers get `v2`, the new checkout. |
 | 1:30 | Carts with a coupon begin to crash inside `checkout_v2.apply_coupon`. The board's counter starts to climb. |
-| about 2:30 | The counter passes 15. Alibi sets the experiment's rollout to 0% in Flagsmith, checks that 20 of 20 identities now get `stable`, and the board says **switched off**. |
-| about 3:30 | Error rate and latency are back at the stable version's level over a full minute. |
-| about 7:30 | The five-minute watch ends. The label appears: **probably the feature**, with the investigation record and Flagsmith's own numbers. |
+| about 2:30 (between 2:21 and 3:01 in our runs) | The counter passes 15. Alibi sets the experiment's rollout to 0% in Flagsmith, checks that 20 of 20 identities now get `stable`, and the board says **switched off**. |
+| a minute later | Error rate and latency are back at the stable version's level over a full minute. |
+| five minutes after the switch-off | The five-minute watch ends. The label appears: **probably the feature**, with the investigation record and Flagsmith's own numbers. |
 
 The command prints a summary when it ends. The recording of the run is written inside the Alibi container; copy it out with `docker compose -f deploy/docker-compose.yml cp alibi:/data/runs/coupon-bug.jsonl .` and replay it with the command in the section above.
 
@@ -191,6 +193,10 @@ Take Flagsmith out and nothing is left. It decides who gets the feature, it is t
 In the coupon run, Flagsmith's engine, fed only from spans, gave the new checkout a 0.013% chance of beating the stable one on completed checkouts (89.1% against 100%; lift −10.9%, interval −16.8% to −5.1%). In the outage run it could not tell them apart (70.2% against 75.9%, 11% chance), which is the right answer: nothing was wrong with the feature.
 
 ![The investigation record, with Flagsmith's numbers](docs/img/record.png)
+
+![Flagsmith's own experiment page after the switch-off: current rollout 0%](docs/img/flagsmith-rollout.png)
+
+The picture above is Flagsmith's own page from a repeat of the coupon run.
 
 One thing we learned from Flagsmith 2.295.2 while building this: disabling a feature that is in a running experiment does not change what identities receive. The experiment's rollout is the switch, so that is what Alibi sets, and it never reports a switch-off that an evaluation did not confirm.
 
@@ -321,6 +327,6 @@ Limits worth knowing before you rely on it:
 
 ## Built with
 
-Built during Toggle Wars (26 to 29 November 2026); the first commit is from 27 November. AI coding assistants wrote most of the code under my direction. The guardrail rule, and the calls on what counts, are mine.
+Built during Toggle Wars, 26 to 29 November 2026. AI coding assistants wrote most of the code under my direction. The guardrail rule, and the calls on what counts, are mine.
 
-MIT licence.
+MIT licence. Third-party parts: Flagsmith (BSD-3-Clause), the OpenTelemetry Collector and Jaeger (Apache-2.0) and Toxiproxy (MIT) run as their own containers; the page's fonts are Bricolage Grotesque, Instrument Sans and JetBrains Mono (OFL-1.1, via Fontsource); the screenshots of Flagsmith's dashboard are of the self-hosted instance in this example; the video's voice is synthetic, made with Kokoro-82M (Apache-2.0).

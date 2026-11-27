@@ -1,6 +1,7 @@
 {
   "name": "@alibi/guard",
   "version": "0.1.0",
+  "license": "MIT",
   "description": "The Alibi guard service: receives OpenTelemetry spans, runs the rule, forwards exposures to Flagsmith and switches the flag off.",
   "private": true,
   "type": "module",

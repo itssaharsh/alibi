@@ -2,9 +2,12 @@
   "name": "@alibi/downstream",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "description": "A tiny HTTP service for the outage scenarios: the tax service and the rules service the shop calls.",
   "type": "module",
-  "engines": { "node": ">=22.15" },
+  "engines": {
+    "node": ">=22.15"
+  },
   "scripts": {
     "start": "node --import ./src/telemetry.js ./src/server.js"
   },

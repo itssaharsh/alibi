@@ -1,6 +1,7 @@
 {
   "name": "@alibi/core",
   "version": "0.1.0",
+  "license": "MIT",
   "description": "Reads OpenTelemetry traces, counts only failures in a feature's own code path, and decides when to switch a Flagsmith flag off.",
   "type": "module",
   "main": "./dist/index.js",
