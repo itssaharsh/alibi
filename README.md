@@ -170,6 +170,15 @@ In the coupon run, Flagsmith's engine, fed only from spans, gave the new checkou
 
 One thing we learned from Flagsmith 2.295.2 while building this: disabling a feature that is in a running experiment does not change what identities receive. The experiment's rollout is the switch, so that is what Alibi sets, and it never reports a switch-off that an evaluation did not confirm.
 
+## Track 03, line by line
+
+| The track asks for | Where it is |
+|---|---|
+| "Self-hosted Flagsmith" | `deploy/docker-compose.yml` starts Flagsmith 2.295.2 from the official image and a bootstrap container creates the flag, the three metrics and the experiment. Every run in this README was recorded on it |
+| "Integrations and plugins" | Alibi sits between the OpenTelemetry Collector and Flagsmith: spans in, exposures and metric events out, the rollout change back in |
+| "Developer tools" | The live board, the investigation record, the replay command, and a one-sentence reason for every failing request |
+| "Easy for others to reuse" | The quickstart above is three commands and was run from a fresh copy. `deploy/attach/` starts only Alibi and the board against a Flagsmith you already have. `packages/otel-helpers` is the two functions a Node service needs |
+
 ## How it works
 
 ```mermaid
@@ -218,7 +227,7 @@ return stableCheckout(cart);
 
 Alibi's settings are environment variables, listed in `packages/guard/README.md`.
 
-## What is real
+## What is real, and what Alibi does not do
 
 | Part | Status |
 |---|---|
@@ -226,6 +235,13 @@ Alibi's settings are environment variables, listed in `packages/guard/README.md`
 | The spans, the Postgres errors, the CPU throttle, the timings | real: recorded on 27 November 2026, replayed unchanged |
 | The shop and its shoppers | scripted |
 | Protobuf OTLP, more than one guarded flag at a time | not built |
+
+Limits worth knowing before you rely on it:
+
+- **The count has no time window.** The rule says "more than 15 requests", so 16 failures spread over a day switch the flag off as surely as 16 in a minute. Re-arm Alibi when you start a rollout.
+- **A dependency that only the new code calls.** If it is down, those failures do not count, because the rule calls that infrastructure. Alibi raises a notice instead ("the stable version never makes this call, so a person should look"); it does not switch the flag off.
+- **It needs a stable arm.** The level that "recovered" is tested against comes from requests that got the stable version, so a flag that is on for everyone has nothing to compare with.
+- **Three runs are three runs.** They are recorded and replayable, not a study.
 
 ## Built with
 
