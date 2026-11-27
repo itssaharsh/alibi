@@ -1,0 +1,205 @@
+WEBVTT
+
+00:00:01.100 --> 00:00:02.450
+You switched a new checkout
+
+00:00:02.450 --> 00:00:04.238
+on for half your shoppers.
+
+00:00:04.238 --> 00:00:07.100
+Minutes later, requests start failing.
+
+00:00:07.100 --> 00:00:08.350
+Was it the flag,
+
+00:00:08.350 --> 00:00:10.600
+or was the database down?
+
+00:00:11.350 --> 00:00:13.013
+A kill switch that watches the
+
+00:00:13.013 --> 00:00:15.113
+error rate does not ask.
+
+00:00:15.113 --> 00:00:17.050
+Here, it would have switched the feature
+
+00:00:17.050 --> 00:00:19.725
+off sixteen seconds into the outage.
+
+00:00:19.725 --> 00:00:22.075
+Comparing the two versions helps only
+
+00:00:22.075 --> 00:00:23.563
+if you guess the margin:
+
+00:00:23.563 --> 00:00:24.825
+at ten points,
+
+00:00:24.825 --> 00:00:27.700
+that switches it off six seconds later.
+
+00:00:28.450 --> 00:00:29.625
+This is Alibi.
+
+00:00:29.625 --> 00:00:33.400
+It reads the OpenTelemetry traces your service already sends,
+
+00:00:33.400 --> 00:00:36.012
+and looks at where each request failed.
+
+00:00:36.012 --> 00:00:38.250
+This one failed in pg.connect,
+
+00:00:38.250 --> 00:00:39.675
+a database call.
+
+00:00:39.675 --> 00:00:41.550
+The database was unavailable,
+
+00:00:41.550 --> 00:00:43.112
+so it does not count.
+
+00:00:43.112 --> 00:00:45.700
+Ninety-seven failures with the flag on.
+
+00:00:45.700 --> 00:00:47.000
+Zero counted.
+
+00:00:47.000 --> 00:00:49.075
+The flag stays on.
+
+00:00:49.850 --> 00:00:51.113
+Now a real bug.
+
+00:00:51.113 --> 00:00:53.175
+Carts with a coupon crash inside
+
+00:00:53.175 --> 00:00:55.150
+the new checkout's own code.
+
+00:00:55.150 --> 00:00:56.275
+These count.
+
+00:00:56.275 --> 00:00:57.562
+At the sixteenth,
+
+00:00:57.562 --> 00:01:01.375
+Alibi sets the experiment's rollout to zero in Flagsmith,
+
+00:01:01.375 --> 00:01:03.313
+then checks twenty shoppers.
+
+00:01:03.313 --> 00:01:05.925
+All twenty get the stable checkout.
+
+00:01:06.675 --> 00:01:08.912
+Then it watches for five minutes.
+
+00:01:08.912 --> 00:01:12.425
+Errors and latency return to the stable version's level,
+
+00:01:12.425 --> 00:01:13.750
+so the record says:
+
+00:01:13.750 --> 00:01:15.212
+probably the feature.
+
+00:01:15.212 --> 00:01:16.337
+Not proven.
+
+00:01:16.337 --> 00:01:18.650
+A person investigates.
+
+00:01:19.400 --> 00:01:21.275
+The record holds the traces,
+
+00:01:21.275 --> 00:01:24.525
+the same failing points compared with the stable version,
+
+00:01:24.525 --> 00:01:27.338
+and Flagsmith's own experiment numbers.
+
+00:01:27.338 --> 00:01:29.475
+Those came from spans alone:
+
+00:01:29.475 --> 00:01:31.725
+the shop has no tracking code.
+
+00:01:31.725 --> 00:01:33.675
+On Flagsmith's own page,
+
+00:01:33.675 --> 00:01:35.362
+the stable version's chance to be
+
+00:01:35.362 --> 00:01:38.050
+best is over ninety-nine percent,
+
+00:01:38.050 --> 00:01:40.775
+and the new checkout's is under one.
+
+00:01:41.525 --> 00:01:42.400
+Third run.
+
+00:01:42.400 --> 00:01:43.700
+The host is slow,
+
+00:01:43.700 --> 00:01:46.625
+so the new checkout's own time budget fails.
+
+00:01:46.625 --> 00:01:47.950
+The rule counts that,
+
+00:01:47.950 --> 00:01:49.650
+and the flag goes off.
+
+00:01:49.650 --> 00:01:52.925
+But latency stays about eight times the stable level,
+
+00:01:52.925 --> 00:01:55.000
+so switching it off did not help.
+
+00:01:55.000 --> 00:01:56.762
+Probably not the feature.
+
+00:01:56.762 --> 00:01:58.688
+Across fifteen more runs,
+
+00:01:58.688 --> 00:02:01.725
+Alibi made the same call every time.
+
+00:02:02.475 --> 00:02:05.212
+That is the rule I wrote before any code.
+
+00:02:05.212 --> 00:02:08.325
+Only failures in the feature's own code count.
+
+00:02:08.325 --> 00:02:10.325
+Switch off above fifteen.
+
+00:02:10.325 --> 00:02:12.325
+Compare with the stable version.
+
+00:02:12.325 --> 00:02:14.700
+And never declare the cause.
+
+00:02:15.425 --> 00:02:16.813
+It plugs in with one more
+
+00:02:16.813 --> 00:02:19.375
+exporter in your OpenTelemetry Collector,
+
+00:02:19.375 --> 00:02:22.125
+and two small helpers in your service.
+
+00:02:22.125 --> 00:02:26.025
+Self-hosted Flagsmith, one compose command.
+
+00:02:26.775 --> 00:02:27.450
+Alibi.
+
+00:02:27.450 --> 00:02:28.775
+Was it the flag,
+
+00:02:28.775 --> 00:02:31.025
+or was the database down?
