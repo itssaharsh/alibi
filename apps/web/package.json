@@ -4,7 +4,6 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev-runs": "tsx scripts/make-dev-runs.ts",
     "prepare-runs": "tsx scripts/prepare-runs.ts",
     "dev": "npm run prepare-runs && vite",
     "build": "npm run prepare-runs && tsc --noEmit && vite build",

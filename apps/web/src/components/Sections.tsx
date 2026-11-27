@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { formatRelative, stableLevelLabel, type FlatSpan } from '@alibi/core';
+import type { Rates } from '@alibi/core';
 import type { Board as BoardData, Tag } from '../lib/viewModel';
-import { outcomeOf } from '../lib/viewModel';
+import { outcomeOf, percent } from '../lib/viewModel';
 import type { Controller } from '../lib/useBoard';
 import { AUTHORS_RULE, COLLECTOR_CONFIG, REPO_URL, SPAN_ATTRIBUTES } from '../lib/copy';
-import { classWords, ms, ratesLine, rel, relMs } from '../lib/format';
+import { classWords, ms, pct, ratesLine, rel, relMs, sig } from '../lib/format';
 import { Waterfall } from './Waterfall';
 import type { Selected } from '../App';
 
@@ -61,6 +62,21 @@ function plainSentence(board: BoardData, finished: boolean): string {
   return finished ? 'A plain error-rate rule would not have switched it off.' : 'A plain error-rate rule is watching the same requests.';
 }
 
+function Level({ title, rates }: { title: string; rates: Rates }) {
+  return (
+    <div>
+      <h4>{title}</h4>
+      <dl>
+        <dt>errors</dt>
+        <dd className="big-n">{percent(rates.errorRate)}</dd>
+        <dt>p95 speed</dt>
+        <dd className="big-n">{ms(rates.p95Ms)}</dd>
+      </dl>
+      <p className="muted small">{ratesLine(rates)}.</p>
+    </div>
+  );
+}
+
 export function WatchBand({ board }: { board: BoardData }) {
   const { state } = board;
   if (state.phase === 'armed' || state.switchedOffAtMs === undefined || state.watchEndsAtMs === undefined) return null;
@@ -87,11 +103,11 @@ export function WatchBand({ board }: { board: BoardData }) {
       <p className="w-line">{line}</p>
       {answer ? <p className="muted small">Flagsmith: {answer}.</p> : null}
       {state.stableBaseline ? (
-        <p className="muted small">
-          {stableLevelLabel(state.stableBaselineWindow)}: {ratesLine(state.stableBaseline)}.
-        </p>
+        <div className="levels">
+          <Level title={stableLevelLabel(state.stableBaselineWindow)} rates={state.stableBaseline} />
+          {board.record ? <Level title="After the switch-off" rates={board.record.afterSwitchOff} /> : null}
+        </div>
       ) : null}
-      {board.record ? <p className="muted small">After the switch-off: {ratesLine(board.record.afterSwitchOff)}.</p> : null}
     </section>
   );
 }
@@ -167,32 +183,45 @@ export function FlagsmithNumbers({ board, small }: { board: BoardData; small?: b
       <h3>Flagsmith's numbers</h3>
       {f ? (
         <>
-          <div className="fs">
-            {f.variations.map((v) => (
-              <div key={v.variation}>
-                <span className="muted small">{v.variation}</span>
-                <p>
-                  <b>{v.exposures}</b> <span className="muted small">exposures</span>
-                </p>
-                <dl>
-                  {v.metrics.map((m) => (
-                    <div key={m.name} className="fs-m">
-                      <dt>{m.name.replace(/_/g, ' ')}</dt>
-                      <dd>
-                        {m.value}
-                        {m.lift !== undefined || m.chanceToWin !== undefined || m.interval ? (
-                          <small>
-                            {m.lift !== undefined ? `lift ${m.lift}` : ''}
-                            {m.chanceToWin !== undefined ? `${m.lift !== undefined ? ', ' : ''}chance to win ${m.chanceToWin}` : ''}
-                            {m.interval ? `${m.lift !== undefined || m.chanceToWin !== undefined ? ', ' : ''}interval ${m.interval[0]} to ${m.interval[1]}` : ''}
-                          </small>
-                        ) : null}
-                      </dd>
-                    </div>
+          <div className="scroll">
+            <table className="fs-table">
+              <thead>
+                <tr>
+                  <th className="left">metric</th>
+                  {f.variations.map((v) => (
+                    <th key={v.variation}>
+                      {v.variation}
+                      <small>{v.exposures} exposures</small>
+                    </th>
                   ))}
-                </dl>
-              </div>
-            ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...new Set(f.variations.flatMap((v) => v.metrics.map((m) => m.name)))].map((name) => (
+                  <tr key={name}>
+                    <td className="left">{name.replace(/_/g, ' ')}</td>
+                    {f.variations.map((v) => {
+                      const m = v.metrics.find((x) => x.name === name);
+                      const extra = m
+                        ? [
+                            m.lift !== undefined ? `lift ${pct(m.lift)}` : '',
+                            m.chanceToWin !== undefined ? `chance to win ${pct(m.chanceToWin)}` : '',
+                            m.interval ? `interval ${sig(m.interval[0])} to ${sig(m.interval[1])}` : '',
+                          ].filter(Boolean)
+                        : [];
+                      return (
+                        <td key={v.variation} className="fs-cell">
+                          {m ? <b>{sig(m.value)}</b> : null}
+                          {extra.map((e) => (
+                            <small key={e}>{e}</small>
+                          ))}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
           <p className="muted small fs-note">
             From Flagsmith Experimentation, {detail ? `${detail} (${rel(board, f.readAtMs)} into the run)` : `read ${rel(board, f.readAtMs)} into the run`}.

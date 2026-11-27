@@ -7,7 +7,7 @@ const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 1 });
 await p.goto(`${base}/?record=1&state=outage`);
 await p.waitForTimeout(2500);
-await p.addStyleTag({ content: '.mini,.btn,.plain{display:none!important}.board{max-height:560px}.wrap{padding-top:16px}' });
+await p.addStyleTag({ content: '.mini,.btn,.plain,.hero~*,footer{display:none!important}.board{max-height:560px}.wrap{padding-top:16px}' });
 await p.screenshot({ path: 'public/og.png' });
 const icon = await b.newPage({ viewport: { width: 180, height: 180 } });
 const svg = readFileSync('public/favicon.svg', 'utf8');

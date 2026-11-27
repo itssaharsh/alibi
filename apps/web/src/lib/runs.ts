@@ -8,8 +8,6 @@ export interface RunEntry {
   source: string;
   /** Bytes of the full run file. */
   size: number;
-  /** True for a generated development run. Never true for a recorded one. */
-  dev?: boolean;
 }
 
 export interface RunIndex {

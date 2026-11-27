@@ -61,9 +61,11 @@ export function App() {
       : ctl.source === 'live-down'
         ? `Live runs are paused. This is the ${board?.meta.title.toLowerCase() ?? ''} replay.`
         : board
-          ? entry?.dev
-            ? 'Development run, scripted traffic'
-            : `Replay of a recorded run: ${board.meta.source}`
+          ? (
+              <>
+                Replay of a recorded run<span className="cap-src">: {board.meta.source}</span>
+              </>
+            )
           : '';
 
   return (
@@ -108,7 +110,11 @@ export function App() {
                 </div>
               ) : null}
               {board ? <WatchBand board={board} /> : null}
-              {board && !board.record && board.flagsmith && !params.record ? <FlagsmithNumbers board={board} small /> : null}
+              {board && !board.record && board.flagsmith && !params.record ? (
+                <div className="fsc-hero">
+                  <FlagsmithNumbers board={board} small />
+                </div>
+              ) : null}
             </div>
             {board ? (
               <Board board={board} ctl={ctl} selected={selected} onPick={pick} calm={!playing || reduced} record={params.record || isLive} skeleton={skeleton} />
@@ -116,6 +122,11 @@ export function App() {
               <div className="board sk" style={{ minHeight: 560 }} aria-busy="true" aria-label="Loading the run" />
             )}
           </section>
+          {board && !board.record && board.flagsmith && !params.record ? (
+            <div className="fsc-after">
+              <FlagsmithNumbers board={board} small />
+            </div>
+          ) : null}
           {mode === 'failed' ? <p className="card muted">This run did not load. Pick another run above, or reload the page.</p> : null}
           {board ? (
             <>

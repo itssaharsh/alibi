@@ -7,17 +7,17 @@ import { Controls } from './Controls';
 import type { Selected } from '../App';
 import { plainRuleLine, alibiLine } from '../lib/format';
 
-const PILE_CAP = 66;
+const PILE_CAP = 300;
 
-function Glyph({ tag, n, onPick, selected, over }: { tag: Tag; n: number; onPick: (t: Tag) => void; selected: boolean; over?: boolean }) {
+function Glyph({ tag, n, onPick, selected, over, plain }: { tag: Tag; n: number; onPick: (t: Tag) => void; selected: boolean; over?: boolean; plain?: boolean }) {
   return (
     <button
       type="button"
-      className={`tag ${tag.counted ? 'hot' : 'dep'}${selected ? ' sel' : ''}${over ? ' over' : ''}`}
+      className={`tag ${tag.counted ? 'hot' : 'dep'}${selected ? ' sel' : ''}${over ? ' over' : ''}${plain ? ' small-tag' : ''}`}
       aria-label={`Failing request ${n}, ${tag.counted ? 'counts' : 'does not count'}, trace ${tag.id.slice(0, 8)}`}
       onClick={() => onPick(tag)}
     >
-      <span>{n}</span>
+      {plain ? null : <span>{n}</span>}
     </button>
   );
 }
@@ -112,7 +112,7 @@ export function Board({ board, ctl, selected, onPick, calm, record, skeleton }: 
           <div className="count dep">{skeleton ? '·' : restCount}</div>
           <div className="pile">
             {rest.slice(0, PILE_CAP).map((t, i) => (
-              <Glyph key={t.id} tag={t} n={i + 1} onPick={onPick} selected={selected.id === t.id} />
+              <Glyph key={t.id} tag={t} n={i + 1} onPick={onPick} selected={selected.id === t.id} plain />
             ))}
             {rest.length > PILE_CAP ? <span className="more">+{rest.length - PILE_CAP} more</span> : null}
             {rest.length === 0 && !skeleton ? <span className="muted small">Nothing has failed outside the flagged code.</span> : null}

@@ -63,6 +63,6 @@ test('the recorded run shows its real sentences and the folded waterfall', async
   await expect(page.getByRole('region', { name: 'Investigation record' })).toContainText("Flagsmith's numbers");
   const numbers = page.getByRole('region', { name: 'Investigation record' });
   await expect(numbers).toContainText('checkout latency ms');
-  await expect(numbers).toContainText('24.9081');
-  await expect(numbers).toContainText('424');
+  await expect(numbers).toContainText('27.16');
+  await expect(numbers).toContainText('126');
 });

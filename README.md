@@ -1,0 +1,162 @@
+# Alibi: was it the flag, or was the database down?
+
+Alibi switches a Flagsmith feature off only when the feature's own code is failing, and tells you why it thinks so. It reads the OpenTelemetry traces your service already sends.
+
+[![The database outage: 97 failures with the flag on, 0 counted, the flag stays on](docs/img/first-screen.png)](https://itssaharsh.github.io/alibi/)
+
+**Live page:** https://itssaharsh.github.io/alibi/ (no sign-in; it replays three recorded runs in your browser)
+**Track:** 03, Build on Open Source Flagsmith
+
+## The problem
+
+You put a new checkout behind a flag for half your shoppers. Twenty minutes later the error graph jumps, and a kill switch that watches the error rate switches the feature off. But the database was down and the feature was fine. Now you have an outage and a rolled-back launch, and nobody knows which caused what.
+
+The trace already knows. Every failing request says where it failed: in the new checkout's own code, or in a call to something that was down.
+
+## What happened in three recorded runs
+
+These ran on a real stack: self-hosted Flagsmith 2.295.2, a shop instrumented with OpenTelemetry, two requests a second from 600 scripted shoppers, recorded on 27 November 2026.
+
+| Run | What was done to the shop | What Alibi did | A plain error-rate rule on the same requests |
+|---|---|---|---|
+| **The database outage** | The database was stopped for 90 seconds | 97 requests with the flag on failed. All 97 failed in `pg.connect`, a dependency call. Alibi counted 0 and left the flag on | would have switched the healthy feature off 16 seconds into the outage |
+| **The coupon bug** | Carts with a coupon crash inside `checkout_v2.apply_coupon` | Counted each one. At the 16th it set the rollout to 0% in Flagsmith and confirmed 20 of 20 identities got the stable checkout. Errors and latency were back at the stable version's level a minute later. Label: **probably the feature** | would also have switched it off, 31 seconds sooner |
+| **The slow host** | The shop's CPU was throttled to a twentieth of a core | The new checkout's own time budget failed 16 times, so the flag went off. Errors stopped, but p95 latency stayed at 330 ms against a stable level of 42 ms. Label: **probably not the feature** | would have switched it off and said nothing more |
+
+Alibi is slower than a plain rule on a real bug by design: it waits for 16 failures in the feature's own code. What it buys is the first row, and the last column of the other two: a record that says what it saw and stops at "probably".
+
+![The coupon bug at the moment the counter passes 15](docs/img/coupon-switch.png)
+
+## For judges: see it in under a minute
+
+1. Open https://itssaharsh.github.io/alibi/. The first screen is the database outage, already finished: 0 of 97 counted, the flag stays on. Click any tag to see that request's spans and the reason.
+2. Press **Replay the database outage**, or pick **The coupon bug** and jump to "The counter passes 15".
+3. Or replay a run in your terminal. This needs Node 22 and nothing else:
+
+```bash
+git clone https://github.com/itssaharsh/alibi && cd alibi/packages/core
+npm install && npm run build
+node dist/cli.js replay ../../runs/coupon-bug.jsonl
+```
+
+```text
+The coupon bug
+Planted: Carts with the SAVE10 coupon crash inside the new checkout's own code.
+Source: self-hosted Flagsmith 2.295.2, recorded 27 Nov 2026
+
++01:30  Carts with the SAVE10 coupon began (about 1 in 5).
++01:33  Flag-on request failed on /checkout (trace 9dce3ca3). Failed in checkout_v2.apply_coupon, a span on the flagged path: TypeError: Cannot read properties of undefined (reading 'percent'). Counts toward the switch-off.
+        ... 17 more lines like this one, one per failing request ...
++01:58  Plain error-rate rule: would have switched the flag off here, 25.0% of 20 flag-on requests failed in 30 seconds.
++02:29  Counter passed 15: 16 failures on the flagged path with the flag on. Switch-off requested.
++02:30  Flagsmith confirmed the switch-off: checkout_v2 rollout set to 0% in Flagsmith; 20 of 20 identities checked get stable
++02:30  Watch started for 5 minutes. Stable version level, measured before the first counted failure: 0.0% errors, p95 32 ms, 93 requests.
++03:30  Error rate and latency are back at the stable version's level over the last 60 seconds: 0.0% errors, p95 30 ms, 113 requests.
++07:31  Label: probably the feature (not proven). A person investigates.
+
+Summary
+  Flag-on failures: 18
+  Counted toward the switch-off: 16 (the flag goes off above 15)
+  Not counted: 0 from a dependency, 0 from the server, 0 mixed
+  Plain error-rate rule: would have switched the flag off at +01:58
+  Result: probably the feature (not proven). A person investigates.
+```
+
+The output above is shortened where it says so. The page and the command run the same engine on the same recorded spans. Only Flagsmith's answers are replayed from the recording.
+
+## The author's rule
+
+Alibi is built around a rule I wrote before any code existed. These are my words, and the engine does exactly this:
+
+> 1. Only failures in the feature's own code path count. If a request fails because the server or a dependency is down, that is an infrastructure problem, not the feature, and it does not count toward a rollback. Classify every failing trace by where it failed (a span on the flagged path, or an infrastructure or dependency span) and show why.
+> 2. Switch the flag off when more than 15 requests with the flag on have failed on the flagged path.
+> 3. The baseline is the previous stable version: compare its metrics at the same failing points (same routes and spans), and show why each one failed.
+> 4. After switching off: if error rate and latency return to the previous stable version's level within 5 minutes, label it "probably the feature", not proven, and open an investigation record with the traces. If they do not recover within 5 minutes, label it "probably not the feature". Either way a person investigates; the system never declares the cause on its own.
+
+The rule leaves four things open. These are Alibi's defaults, set in one place (`defaultConfig` in `packages/core/src/guard.ts`) and not part of the rule:
+
+- **"Returned to the stable version's level"** means: over the last 60 seconds, all of them after the switch-off, with at least 20 requests, the error rate is within 2 percentage points of the stable level and p95 latency is within 1.25 times it.
+- **The stable level** is measured before the first counted failure, so a host that is already slow cannot pass as "back to normal".
+- **A request counts** only when every span where an error started is on the flagged path.
+- **A dependency called from the flagged path** does not count when it was unavailable (refused, timed out, 5xx). It does count when it rejected the call (4xx, a syntax error), because then the call was wrong.
+
+## How Flagsmith is used
+
+Take Flagsmith out and nothing is left. It decides who gets the feature, it is the switch, and it holds the comparison.
+
+| Flagsmith feature | What it does here | Where |
+|---|---|---|
+| Self-hosted Flagsmith in Docker | The whole example runs against your own Flagsmith, created and configured by a bootstrap container | `deploy/docker-compose.yml`, `deploy/bootstrap/bootstrap.sh` |
+| Multivariate flag with keyed variations | `checkout_v2` gives each shopper `stable` or `v2`. The shop reads it with a plain flag call | `apps/shop/src/flagged.js` |
+| Experimentation: exposures and metrics | Alibi turns spans into exposure events and three metric events (`checkout_completed`, `flag_path_failure`, `checkout_latency_ms`). The shop has no tracking call of its own | `packages/guard/src/forwarder.ts` |
+| Experiment rollout, through the Admin API | The switch. Alibi sets the experiment's rollout to 0%, then evaluates 20 identities and requires every one to get `stable` before it reports the switch-off | `packages/guard/src/flagsmith.ts` |
+| Experiment results | Flagsmith's own numbers per variation go into the investigation record | the record on the live page |
+
+In the coupon run, Flagsmith's engine, fed only from spans, gave the new checkout a 0.01% chance of beating the stable one on completed checkouts (89.1% against 100%; lift −10.9%, interval −16.8% to −5.1%). In the outage run it could not tell them apart (70.2% against 75.9%, 11% chance), which is the right answer: nothing was wrong with the feature.
+
+![The investigation record, with Flagsmith's numbers](docs/img/record.png)
+
+One thing we learned from Flagsmith 2.295.2 while building this: disabling a feature that is in a running experiment does not change what identities receive. The experiment's rollout is the switch, so that is what Alibi sets, and it never reports a switch-off that an evaluation did not confirm.
+
+## How it works
+
+```mermaid
+flowchart LR
+  shop["Your service<br/>reads the flag from Flagsmith,<br/>writes the answer on the span"] -->|OTLP| col[OpenTelemetry Collector]
+  col --> jaeger[Jaeger]
+  col -->|OTLP/HTTP JSON| alibi[Alibi]
+  alibi -->|exposures and metric events| fs[(Flagsmith)]
+  alibi -->|rollout to 0%, then 20 evaluations| fs
+  fs -->|variation per shopper| shop
+  alibi --> rec[Investigation record]
+```
+
+- Your service evaluates the flag and puts the answer on the span as a `feature_flag.evaluation` event. Alibi never decides a variation.
+- You wrap the feature's code in one span that carries `alibi.flagged_path=<flag>`.
+- The collector you already run gets one more exporter.
+- For each failing request, Alibi finds the span where the error started and classes the request: flagged path, dependency, server, or mixed. It writes one sentence from that span's own fields, for example: "Failed in pg.connect, a dependency call (db.system.name=postgresql): Connection terminated unexpectedly. The dependency was unavailable, so this does not count."
+- The engine (`packages/core`) is pure TypeScript with no dependencies. The guard service and the page run the same code, and 140 tests pin its sentences word for word, including on spans captured from the real stack and on the three recorded runs.
+
+The attribute names follow OpenTelemetry's feature-flag semantic conventions, which are still a release candidate, so this is not a conformance claim.
+
+## Use it with your own service
+
+Point one more exporter at Alibi:
+
+```yaml
+exporters:
+  otlphttp/alibi:
+    endpoint: http://alibi:4319
+    encoding: json
+service:
+  pipelines:
+    traces:
+      exporters: [otlp/jaeger, otlphttp/alibi]
+```
+
+Put the flag's answer on the span, and run the feature inside a marked span. This is the whole integration (`apps/shop/src/flagged.js` has both helpers for Node):
+
+```js
+const variation = await evaluateFlag({ flagsmith, flag: 'checkout_v2', userId, fallback: 'stable' });
+if (variation === 'v2') {
+  return runFlagged('checkout_v2', 'checkout_v2', () => newCheckout(cart));
+}
+return stableCheckout(cart);
+```
+
+Alibi's settings are environment variables, listed in `packages/guard/README.md`.
+
+## What is real
+
+| Part | Status |
+|---|---|
+| Flagsmith, the flag, the experiment, the switch-off and its confirmation | real: self-hosted Flagsmith 2.295.2 |
+| The spans, the Postgres errors, the CPU throttle, the timings | real: recorded on 27 November 2026, replayed unchanged |
+| The shop and its shoppers | scripted |
+| Protobuf OTLP, more than one guarded flag at a time | not built |
+
+## Built with
+
+Built during Toggle Wars, 27 to 29 November 2026. AI coding assistants wrote most of the code under my direction. The guardrail rule, and the calls on what counts, are mine.
+
+MIT licence.

@@ -1,7 +1,7 @@
 /**
  * Build step: runs the engine over every run file and writes what the static page loads:
  *   public/runs/<name>.jsonl, <name>.summary.json (the finished result, small), index.json, and public/probe.json.
- * Run files come from the repository's runs/ folder; with none there, development runs are generated.
+ * Run files come from the repository's runs/ folder; the build fails if a recorded run is missing.
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -9,7 +9,6 @@ import { fileURLToPath } from 'node:url';
 import { createReplayer, parseRun } from '../../../packages/core/src/index.js';
 import { metaOf, recordedResults, snapshotOf } from '../src/lib/snapshots';
 import type { RunSummary } from '../src/lib/runs';
-import { devDir, makeDevRuns } from './make-dev-runs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const web = join(here, '..');
@@ -20,19 +19,13 @@ const MAX_TAGS = 400;
 const list = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.jsonl')) : []);
 
 const NAMES = ['outage', 'coupon-bug', 'slow-host'];
-const real = new Map(list(recorded).map((f) => [f.replace('.jsonl', ''), join(recorded, f)]));
-const sources = new Map<string, { path: string; dev: boolean }>([...real].map(([n, path]) => [n, { path, dev: false }]));
-const missing = NAMES.filter((n) => !real.has(n));
-if (missing.length > 0) {
-  const banner = `DEVELOPMENT RUNS IN THIS BUILD: ${missing.join(', ')} (no recorded file in runs/). Do not ship this build.`;
-  console.warn(`\n${'!'.repeat(banner.length)}\n${banner}\n${'!'.repeat(banner.length)}\n`);
-  if (process.env.ALIBI_REQUIRE_REAL_RUNS === '1') {
-    console.error('ALIBI_REQUIRE_REAL_RUNS=1: the build fails because a run would be generated.');
-    process.exit(1);
-  }
-  makeDevRuns();
-  for (const n of missing) sources.set(n, { path: join(devDir, `${n}.jsonl`), dev: true });
+const found = list(recorded).map((f) => f.replace('.jsonl', ''));
+const absent = NAMES.filter((n) => !found.includes(n));
+if (absent.length > 0) {
+  console.error(`The recorded run files runs/${absent.join('.jsonl, runs/')}.jsonl are missing. The page only ships recorded runs.`);
+  process.exit(1);
 }
+const sources = new Map<string, string>(found.map((n) => [n, join(recorded, `${n}.jsonl`)]));
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
@@ -44,11 +37,11 @@ const files = [...sources.keys()].sort((a, b) => {
   return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
 });
 
-const runs: { name: string; title: string; planted: string; source: string; size: number; dev?: true }[] = [];
+const runs: { name: string; title: string; planted: string; source: string; size: number }[] = [];
 let probe: Record<string, unknown> | undefined;
 
 for (const name of files) {
-  const { path: file, dev } = sources.get(name) as { path: string; dev: boolean };
+  const file = sources.get(name) as string;
   const lines = parseRun(readFileSync(file, 'utf8'));
   const replayer = createReplayer(lines);
   replayer.step(Infinity);
@@ -69,14 +62,13 @@ for (const name of files) {
   const summary: RunSummary = { meta, snapshot, ...(featured ? { featured } : {}) };
   writeFileSync(join(out, `${name}.summary.json`), JSON.stringify(summary));
   copyFileSync(file, join(out, `${name}.jsonl`));
-  runs.push({ name, title: meta.title, planted: meta.planted, source: meta.source, size: statSync(file).size, ...(dev ? { dev: true as const } : {}) });
+  runs.push({ name, title: meta.title, planted: meta.planted, source: meta.source, size: statSync(file).size });
 
   if (name === 'outage') {
     const s = result.state;
     const stays = s.switchedOffAtMs === undefined && s.counted === 0;
     probe = {
       run: name,
-      ...(dev ? { dev: true } : {}),
       decision: stays ? 'flag stays on' : s.label ?? 'flag switched off',
       counted: s.counted,
       flagOnFailures: s.totals.flagOn.failures,
@@ -87,4 +79,4 @@ for (const name of files) {
 
 writeFileSync(join(out, 'index.json'), JSON.stringify({ runs, default: runs.find((r) => r.name === 'outage')?.name ?? runs[0]?.name ?? '' }));
 writeFileSync(join(web, 'public', 'probe.json'), JSON.stringify(probe ?? { decision: 'no run' }));
-console.log(`prepared ${runs.length} runs: ${runs.map((r) => `${r.name}${r.dev ? ' [DEV]' : ''} (${(r.size / 1e6).toFixed(1)} MB)`).join(', ')}`);
+console.log(`prepared ${runs.length} runs: ${runs.map((r) => `${r.name} (${(r.size / 1e6).toFixed(1)} MB)`).join(', ')}`);

@@ -59,7 +59,6 @@ jobs:
           ALIBI_BASE: /alibi/
           ALIBI_SITE_URL: https://itssaharsh.github.io/alibi/
           VITE_REPO_URL: https://github.com/itssaharsh/alibi
-          ALIBI_REQUIRE_REAL_RUNS: '1'
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
         working-directory: apps/web

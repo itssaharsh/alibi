@@ -1,7 +1,7 @@
 name: Pages
 
 # Builds the public page (the recorded runs replayed in the browser) and publishes it to GitHub Pages.
-# The build fails if a recorded run is missing, so a development run can never be deployed.
+# The build fails if a recorded run is missing from runs/.
 on:
   push:
     branches: [main]
@@ -34,7 +34,6 @@ jobs:
           ALIBI_BASE: /alibi/
           ALIBI_SITE_URL: https://itssaharsh.github.io/alibi/
           VITE_REPO_URL: https://github.com/itssaharsh/alibi
-          ALIBI_REQUIRE_REAL_RUNS: '1'
       - uses: actions/upload-pages-artifact@v5
         with:
           path: apps/web/dist

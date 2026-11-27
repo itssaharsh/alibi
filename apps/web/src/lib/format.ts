@@ -14,6 +14,17 @@ export const classWords: Record<FailureClass, string> = {
 
 /** Durations and levels are written by the engine, never rounded here. */
 export const ms = formatMs;
+/** Recorded numbers, formatted and never rounded to nothing: a chance of 0.00013 reads "0.013%". */
+export function pct(fraction: number): string {
+  const p = fraction * 100;
+  if (p === 0) return '0%';
+  const a = Math.abs(p);
+  if (a >= 10) return `${p.toFixed(0)}%`;
+  if (a >= 1) return `${p.toFixed(1)}%`;
+  return `${Number(p.toPrecision(2))}%`;
+}
+export const sig = (x: number): string => String(Number(x.toPrecision(4)));
+
 export const ratesLine = (r: Rates): string => describeLevel(r);
 
 /** The plain rule's side of the story, from the engine's state. */
