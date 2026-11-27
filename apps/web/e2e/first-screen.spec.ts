@@ -118,13 +118,14 @@ test('with a demo video, the link and a lazy player appear and nothing is downlo
   await page.goto('./');
   const link = page.getByRole('link', { name: 'Watch the demo (2:32)' });
   await expect(link).toBeVisible();
+  await expect(page.locator('#demo')).toContainText('The demo');
+  // The player is drawn only when its section nears the screen, so go there first.
+  await link.click();
   const video = page.locator('#demo video');
+  await expect(video).toBeInViewport();
   await expect(video).toHaveAttribute('preload', 'none');
   await expect(video).toHaveAttribute('poster', /alibi-demo-poster\.jpg$/);
   await expect(video.locator('track')).toHaveAttribute('kind', 'captions');
-  await expect(page.locator('#demo')).toContainText('The demo');
-  await link.click();
-  await expect(video).toBeInViewport();
   expect(requested.filter((u) => u.endsWith('alibi-demo.mp4')), 'the video was fetched before play').toEqual([]);
 });
 
