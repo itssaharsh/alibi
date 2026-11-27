@@ -95,6 +95,8 @@ export class FakeFlagsmith {
   readonly headers: IncomingMessage['headers'][] = [];
   refreshes = 0;
   patches = 0;
+  /** Answer this many result reads with nothing yet, as Flagsmith does just after a refresh. */
+  resultsMissing = 0;
   readonly rollouts: Record<string, unknown>[] = [];
   /** Variation shares in the results the fake returns. */
   exposed = { stable: 300, v2: 310 };
@@ -205,7 +207,13 @@ export class FakeFlagsmith {
     if (path === `${env}/experiment-metrics/` && method === 'GET') {
       return { status: 200, body: [{ id: 11, name: 'checkout_completed' }, { id: 13, name: 'checkout_latency_ms' }] };
     }
-    if (path === `${env}/experiments/1/results/` && method === 'GET') return { status: 200, body: this.results() };
+    if (path === `${env}/experiments/1/results/` && method === 'GET') {
+      if (this.resultsMissing > 0) {
+        this.resultsMissing -= 1;
+        return { status: 200, body: { results: null } };
+      }
+      return { status: 200, body: this.results() };
+    }
     return { status: 404, body: { detail: 'not found' } };
   }
 
@@ -220,17 +228,17 @@ export class FakeFlagsmith {
           metrics: [
             {
               metric_id: 11,
-              variants: { stable: { n: stable, sum: 200, sum_squares: 200 }, v2: { n: v2, sum: 250, sum_squares: 250 } },
+              variants: { control: { n: stable, sum: 200, sum_squares: 200 }, v2: { n: v2, sum: 250, sum_squares: 250 } },
               inference: { v2: { lift: 0.25, ci_low: 0.05, ci_high: 0.45, chance_to_win: 0.97 } },
             },
             {
               metric_id: 13,
-              variants: { stable: { n: stable, sum: 30000, sum_squares: 1 }, v2: { n: v2, sum: 31000, sum_squares: 1 } },
+              variants: { control: { n: stable, sum: 30000, sum_squares: 1 }, v2: { n: v2, sum: 31000, sum_squares: 1 } },
               inference: { v2: { lift: 0.04, ci_low: -0.1, ci_high: 0.18, chance_to_win: 0.3 } },
             },
           ],
           srm_p_value: null,
-          exposures_timeseries: { points: [{ bucket: '2026-11-26T23:00:00+00:00', new_identities: { stable, v2 } }], granularity: 'hour' },
+          exposures_timeseries: { points: [{ bucket: '2026-11-26T23:00:00+00:00', new_identities: { control: stable, v2 } }], granularity: 'hour' },
         },
         is_final: false,
       },

@@ -118,3 +118,24 @@ describe('the switch-off', () => {
     expect(fake.count('PATCH')).toBe(0);
   });
 });
+
+describe('forwarding after the switch-off', () => {
+  it('stops sending exposures and metrics once the switch-off is confirmed, but flushes what was queued before', async () => {
+    feedCrossing(h);
+    await h.clock.advanceBy(3000);
+    expect(h.service.state().state.phase).toBe('watching');
+    const view = h.service.state();
+    expect(view.flagsmith.forwardingStoppedAtMs).toBe(view.state.switchedOffAtMs);
+    // the 30 requests judged before the confirmation: failing ones send 3 events, passing ones 3, all of them sent
+    await h.clock.advanceBy(5000);
+    const sentBefore = fake.events.length;
+    expect(sentBefore).toBe(20 * 3 + 10 * 3);
+    for (let n = 0; n < 20; n += 1) {
+      h.service.receive(checkoutTrace({ n: 5000 + n, startMs: h.clock.now() - 100, durationMs: 80, variation: n % 2 ? V2 : 'stable', identity: `later-${n}` }));
+    }
+    await h.clock.advanceBy(10000);
+    expect(fake.events.length).toBe(sentBefore);
+    expect(h.service.state().flagsmith.forwarded).toMatchObject({ sent: sentBefore, queued: 0 });
+    expect(h.service.state().state.totals.flagOn.requests + h.service.state().state.totals.stable.requests).toBe(50);
+  });
+});

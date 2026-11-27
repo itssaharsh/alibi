@@ -54,7 +54,8 @@ describe('after a finished run', () => {
     expect(Object.keys(body).sort()).toEqual(['flagsmith', 'lastSpanAtMs', 'receiver', 'records', 'recent', 'run', 'state', 'timeline'].sort());
     expect(body.state.phase).toBe('closed');
     expect(body.state.label).toBe('probably the feature');
-    expect(body.flagsmith.forwarded.accepted).toBeGreaterThan(1000);
+    expect(body.flagsmith.forwarded.accepted).toBeGreaterThan(300);
+    expect(body.flagsmith.forwardingStoppedAtMs).toBe(body.state.switchedOffAtMs);
     expect(body.flagsmith.switchOff.confirmed).toBe(true);
     expect(body.recent.length).toBeGreaterThan(100);
     expect(body.recent.length).toBeLessThanOrEqual(200);

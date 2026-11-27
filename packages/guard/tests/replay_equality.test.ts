@@ -67,15 +67,12 @@ describe('replaying what the live service recorded', () => {
       const liveRecord = JSON.parse(readFileSync(join(h.dir, 'data', 'records', `${entry?.id}.json`), 'utf8')) as InvestigationRecord;
       const replayRecord = replay.record as InvestigationRecord;
       expect(replayRecord).toBeDefined();
-      // The live record was read again at the end of the watch; the replay holds the numbers read at the switch-off.
-      const { flagsmith: liveNumbers, ...liveRest } = liveRecord;
-      const { flagsmith: replayNumbers, ...replayRest } = replayRecord;
-      expect(replayRest).toEqual(liveRest);
+      expect(liveRecord.flagsmith?.variations).toHaveLength(2);
+      expect(replayRecord).toEqual(liveRecord);
       const recorded = lines.find((line) => line.kind === 'flagsmith' && line.what === 'results');
-      expect(replayNumbers).toEqual((recorded as { data: unknown }).data);
-      expect(liveNumbers?.variations).toEqual(replayNumbers?.variations);
+      expect((recorded as { data: unknown }).data).toEqual(liveRecord.flagsmith);
 
-      expect(replay.record?.timeline.map((t) => t.text)).toEqual(liveRecord.timeline.map((t) => t.text));
+
       expect(formatReport(replay)).toContain(`Result: ${live.label} (not proven)`);
       expect(readFileSync(file, 'utf8').endsWith('\n')).toBe(true);
     });

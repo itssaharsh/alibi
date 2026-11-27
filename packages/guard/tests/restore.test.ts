@@ -42,7 +42,6 @@ describe('a restart in the middle of a run', () => {
     expect(view.counted).toBe(16);
     expect(view.switchedOffAtMs).toBe(before.switchedOffAtMs);
     expect(view.switchOffConfirmed).toBe(true);
-    expect(second.service.state().flagsmith.results).toBeDefined();
     expect(second.service.state().timeline.map((t) => t.text)).toEqual(first.service.state().timeline.map((t) => t.text));
 
     await play(second, lines);
@@ -52,6 +51,7 @@ describe('a restart in the middle of a run', () => {
     const [entry] = second.service.listRecords();
     const record = JSON.parse(readFileSync(join(dir, 'data', 'records', `${entry?.id}.json`), 'utf8')) as InvestigationRecord;
     expect(record.counted).toBe(16);
+    expect(record.flagsmith?.variations).toHaveLength(2);
     expect(record.traces.length).toBeGreaterThanOrEqual(16);
     expect(record.baseline.length).toBeGreaterThan(0);
     expect(fake.patches).toBe(1);

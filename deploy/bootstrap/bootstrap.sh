@@ -79,6 +79,10 @@ say "master API key for Alibi"
 MASTER_KEY=""
 if [ -f "$SHARED/flagsmith.env" ]; then
   MASTER_KEY=$(sed -n 's/^FLAGSMITH_MASTER_KEY=//p' "$SHARED/flagsmith.env")
+  # A key left over from a Flagsmith database that was deleted no longer works: make a new one.
+  if [ -n "$MASTER_KEY" ] && [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Api-Key $MASTER_KEY" "$API/organisations/")" != 200 ]; then
+    MASTER_KEY=""
+  fi
 fi
 if [ -z "$MASTER_KEY" ]; then
   MASTER_KEY=$(call POST "organisations/$ORG_ID/master-api-keys/" \

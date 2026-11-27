@@ -32,14 +32,18 @@ Flagsmith settings come from these variables or from the bootstrap file (`ALIBI_
 | `ALIBI_RULES` | none | JSON rule file: `flag`, `stableVariation`, `threshold`, `watchMs`, `tolerance`, `plainRule`, `events` (`exposure`, `completed`, `failure`, `latency`). |
 | `ALIBI_FLAG`, `ALIBI_STABLE_VARIATION`, `ALIBI_THRESHOLD`, `ALIBI_WATCH_MS` | rule file, then bootstrap file, then `checkout_v2`, `stable`, `15`, `300000` | Override single rule values. |
 | `ALIBI_MAX_BODY_BYTES` | `8388608` | Largest accepted body, also after unzipping. |
-| `ALIBI_CONTROL_TOKEN` | none | When set, `POST /api/arm` and `POST /api/world` need `Authorization: Bearer <token>` (or `X-Alibi-Token`). |
+| `ALIBI_CONTROL_TOKEN` | none | When set, `POST /api/arm`, `/api/world` and `/api/finish` need `Authorization: Bearer <token>` (or `X-Alibi-Token`). |
 | `ALIBI_RECORD` | none | Write a run file (JSON lines) to this path. |
 | `ALIBI_RECORD_DIR` | none | `POST /api/arm` starts a new run file `<name>.jsonl` here. |
 | `ALIBI_RUN_NAME`, `ALIBI_RUN_TITLE`, `ALIBI_RUN_PLANTED` | `live`, the name, `Not stated.` | Header of the run file. |
 
 ## HTTP
 
-`POST /v1/traces` (OTLP JSON, gzip accepted), `GET /healthz`, `GET /api/state`, `GET /api/events` (server-sent events: engine events, `rates` once a second, `world`, `state` every 2 s), `GET /api/records`, `GET /api/records/:id` and `:id.md`, `GET /api/traces/:traceId`, `POST /api/world {text}`, `POST /api/arm {name,title,planted,force}`. GET answers allow any origin.
+`POST /v1/traces` (OTLP JSON, gzip accepted), `GET /healthz`, `GET /api/state`, `GET /api/events` (server-sent events: engine events, `rates` once a second, `world`, `state` every 2 s), `GET /api/records`, `GET /api/records/:id` and `:id.md`, `GET /api/traces/:traceId`, `POST /api/world {text}`, `POST /api/arm {name,title,planted,force}`, `POST /api/finish {}` (end of a scenario: reads Flagsmith's results for a run that never switched off, then closes the recording). GET answers allow any origin.
+
+## Flagsmith events
+
+Exposures and the three metric events are forwarded for every request that carries an evaluation of the guarded flag; the stable version is sent as the variation `control`, the key Flagsmith compares everything with. Once the switch-off is confirmed (rollout 0%, nobody is in the experiment) nothing more is sent; `GET /api/state` shows `flagsmith.forwardingStoppedAtMs`. Flagsmith's results are read once, 10 seconds before the watch ends, and Flagsmith fills chance to win and the interval only with 50 identities and 5 conversions in each arm.
 
 ## Tests
 

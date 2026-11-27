@@ -27,8 +27,14 @@ const record = (): InvestigationRecord => {
 };
 
 describe("Flagsmith's own numbers", () => {
-  it('reads the results at the switch-off and maps the real payload shape', async () => {
-    await play(h, buildRun('feature-bug'), START + 150_000);
+  it('reads the results once, shortly before the watch ends, and the record carries them', async () => {
+    const lines = buildRun('feature-bug');
+    await play(h, lines, START + 150_000);
+    expect(fake.refreshes).toBe(0);
+    expect(h.service.state().flagsmith.results).toBeUndefined();
+    const off = h.service.state().state.switchedOffAtMs as number;
+    await play(h, lines, off + 300_100);
+    expect(h.service.state().state.phase).toBe('closed');
     expect(fake.refreshes).toBe(1);
     const results = h.service.state().flagsmith.results;
     expect(results).toEqual({
@@ -53,35 +59,34 @@ describe("Flagsmith's own numbers", () => {
         },
       ],
     });
+    expect(record().flagsmith).toEqual(results);
+    expect(results?.readAtMs).toBeLessThan(off + 300_000);
+    await h.clock.advanceBy(600_000);
+    expect(fake.refreshes).toBe(1);
   });
 
-  it('respects the 300 second limit: the end-of-watch read waits until Flagsmith allows it', async () => {
+  it('waits for Flagsmith to finish a refresh instead of treating "nothing yet" as a failure', async () => {
     const lines = buildRun('feature-bug');
     await play(h, lines, START + 150_000);
+    fake.resultsMissing = 3;
     const off = h.service.state().state.switchedOffAtMs as number;
     await play(h, lines, off + 300_100);
-    expect(h.service.state().state.phase).toBe('closed');
+    await h.clock.advanceBy(10_000);
     expect(fake.refreshes).toBe(1);
-    const atLabel = record();
-    expect(Math.abs((atLabel.flagsmith?.readAtMs as number) - off)).toBeLessThanOrEqual(1);
-
-    await play(h, lines);
-    expect(fake.refreshes).toBe(2);
-    const later = record();
-    expect(later.flagsmith?.readAtMs).toBeGreaterThanOrEqual(off + 300_000);
-    expect(later.flagsmith?.variations).toEqual(atLabel.flagsmith?.variations);
+    expect(record().flagsmith?.variations).toHaveLength(2);
   });
 
-  it('on a 429 waits for the time Flagsmith names and tries once more', async () => {
+  it('on a 429 waits for the time Flagsmith names, tries once more and updates the record', async () => {
     const lines = buildRun('feature-bug');
     await play(h, lines, START + 150_000);
     fake.limits = [100];
-    await play(h, lines);
-    await h.clock.advanceBy(300_000);
-    expect(fake.refreshes).toBe(3);
-    const readAt = record().flagsmith?.readAtMs as number;
     const off = h.service.state().state.switchedOffAtMs as number;
-    expect(readAt).toBeGreaterThanOrEqual(off + 300_000 + 100_000);
+    await play(h, lines, off + 300_100);
+    expect(fake.refreshes).toBe(1);
+    expect(record().flagsmith).toBeUndefined();
+    await h.clock.advanceBy(120_000);
+    expect(fake.refreshes).toBe(2);
+    expect(record().flagsmith?.readAtMs).toBeGreaterThanOrEqual(off + 300_000);
   });
 
   it('never loops: two refusals in a row stop after one retry', async () => {
@@ -90,7 +95,7 @@ describe("Flagsmith's own numbers", () => {
     fake.limits = [60, 60, 60, 60];
     await play(h, lines);
     await h.clock.advanceBy(600_000);
-    expect(fake.refreshes).toBe(3);
-    expect(Math.abs((record().flagsmith?.readAtMs as number) - (h.service.state().state.switchedOffAtMs as number))).toBeLessThanOrEqual(1);
+    expect(fake.refreshes).toBe(2);
+    expect(record().flagsmith).toBeUndefined();
   });
 });

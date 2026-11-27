@@ -229,7 +229,8 @@ export class FlagsmithApi {
     if (reply.status !== 200) throw this.failure('Flagsmith results', reply);
     const results = isRecord(reply.body) && isRecord(reply.body.results) ? reply.body.results : undefined;
     const payload = results && isRecord(results.payload) ? results.payload : undefined;
-    if (!results || !payload) throw new FlagsmithError('Flagsmith has no results for the experiment yet', true);
+    // Right after a refresh Flagsmith may not have written anything yet: that is "not fresh", not an error.
+    if (!results || !payload) return { summary: { experimentId: experiment, readAtMs, variations: [] }, fresh: false };
     const asOf = typeof results.as_of === 'string' ? Date.parse(results.as_of) : NaN;
     const requested = typeof results.refresh_requested_at === 'string' ? Date.parse(results.refresh_requested_at) : NaN;
     const fresh = Number.isNaN(asOf) || Number.isNaN(requested) ? true : asOf >= requested;
@@ -262,12 +263,14 @@ export function summariseResults(
   stable: string,
   metricNames: ReadonlyMap<number, string>,
 ): FlagsmithExperimentSummary {
+  /** The stable version is sent to Flagsmith as `control`; the summary names it as the guard does. */
+  const named = (key: string): string => (key === 'control' ? stable : key);
   const exposures = new Map<string, number>();
   const series = isRecord(payload.exposures_timeseries) && Array.isArray(payload.exposures_timeseries.points) ? payload.exposures_timeseries.points : [];
   for (const point of series) {
     if (!isRecord(point) || !isRecord(point.new_identities)) continue;
     for (const [variation, count] of Object.entries(point.new_identities)) {
-      exposures.set(variation, (exposures.get(variation) ?? 0) + (num(count) ?? 0));
+      exposures.set(named(variation), (exposures.get(named(variation)) ?? 0) + (num(count) ?? 0));
     }
   }
   const metrics = Array.isArray(payload.metrics) ? payload.metrics.filter(isRecord) : [];
@@ -286,7 +289,8 @@ export function summariseResults(
     const name = id === undefined ? 'metric' : (metricNames.get(id) ?? `metric ${id}`);
     const variants = isRecord(metric.variants) ? metric.variants : {};
     const inference = isRecord(metric.inference) ? metric.inference : {};
-    for (const [variation, stats] of Object.entries(variants)) {
+    for (const [key, stats] of Object.entries(variants)) {
+      const variation = named(key);
       if (!isRecord(stats)) continue;
       const n = num(stats.n) ?? 0;
       const sum = num(stats.sum) ?? 0;
@@ -296,7 +300,7 @@ export function summariseResults(
         name,
         value: n === 0 ? 0 : Math.round((sum / n) * 10000) / 10000,
       };
-      const infer = inference[variation];
+      const infer = inference[key];
       if (isRecord(infer)) {
         const lift = num(infer.lift);
         const chance = num(infer.chance_to_win);

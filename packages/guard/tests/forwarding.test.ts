@@ -40,7 +40,7 @@ describe('forwarding to Flagsmith Experimentation', () => {
     expect(exposure).toEqual({ event: '$flag_exposure', identifier: 'ann', feature_name: 'checkout_v2', value: 'v2', timestamp: START + 120 });
     const latency = fake.events.find((e) => e.identifier === 'ann' && e.event === 'checkout_latency_ms');
     expect(latency).toMatchObject({ value: 120, timestamp: START + 120 });
-    expect(fake.events.find((e) => e.identifier === 'di' && e.event === '$flag_exposure')).toMatchObject({ value: 'stable' });
+    expect(fake.events.find((e) => e.identifier === 'di' && e.event === '$flag_exposure')).toMatchObject({ value: 'control' });
     for (const event of fake.events) expect(Number.isInteger(event.timestamp) && (event.timestamp as number) > 1.5e12).toBe(true);
     expect(fake.headers.find((header) => header['x-environment-key'])).toBeDefined();
     expect(h.service.state().flagsmith.forwarded).toMatchObject({ sent: 11, accepted: 11, rejected: 0, failed: 0 });

@@ -31,7 +31,9 @@ import { slimSpan } from './slim.js';
 const TICK_MS = 1000;
 const EVENTS_LINE_EVERY_TICKS = 30;
 const PERSIST_DELAY_MS = 1000;
-const REFRESH_LIMIT_MS = 300000;
+/** Flagsmith compares every variant with the one whose key is exactly `control`, so the stable version is sent under that key. */
+const CONTROL_VARIANT = 'control';
+const END_READ_LEAD_MS = 10000;
 const REFRESH_MARGIN_MS = 1000;
 const SWITCH_OFF_BACKOFF_MS = [1000, 2000, 4000, 8000, 15000];
 const KEEP_VERDICTS = 20000;
@@ -64,7 +66,7 @@ export interface SwitchOffView {
 
 export interface StatePayload {
   state: GuardState;
-  flagsmith: { forwarded: ForwardCounters; switchOff: SwitchOffView; results?: FlagsmithExperimentSummary };
+  flagsmith: { forwarded: ForwardCounters; /** Set once the rollout is 0%: no more exposures or metrics are sent. */ forwardingStoppedAtMs?: number; switchOff: SwitchOffView; results?: FlagsmithExperimentSummary };
   /** The last 200 verdicts that failed or had the flag on. */
   recent?: TraceVerdict[];
   timeline: TimelineEntry[];
@@ -94,13 +96,14 @@ interface Persisted {
   timeline: TimelineEntry[];
   switchOff: { requested: boolean; detail: string };
   results?: FlagsmithExperimentSummary;
-  nextRefreshAtMs?: number;
   endReadPending: boolean;
   recordId?: string;
   forwarded: ForwardCounters;
   receiver: ReceiverCounters;
   lastSpanAtMs?: number;
   recordingPath?: string;
+  forwardingStoppedAtMs?: number;
+  lastRefreshAtMs?: number;
 }
 
 function isPersisted(value: unknown): value is Persisted {
@@ -154,7 +157,9 @@ export class AlibiService {
   private window = { flagOn: emptyBucket(), stable: emptyBucket(), unflagged: emptyBucket() };
   private switchOff = { requested: false, detail: '' };
   private results: FlagsmithExperimentSummary | undefined;
-  private nextRefreshAtMs: number | undefined;
+  private reading = false;
+  private lastRefreshAtMs: number | undefined;
+  private forwardingStoppedAtMs: number | undefined;
   private endReadPending = false;
   private lastRecord: InvestigationRecord | undefined;
   private receiver: ReceiverCounters = { batches: 0, spans: 0, malformed: 0 };
@@ -202,10 +207,11 @@ export class AlibiService {
       this.timeline = restored.timeline;
       this.switchOff = restored.switchOff;
       this.results = restored.results;
-      this.nextRefreshAtMs = restored.nextRefreshAtMs;
       this.endReadPending = restored.endReadPending;
       this.receiver = restored.receiver;
       this.lastSpanAtMs = restored.lastSpanAtMs;
+      this.forwardingStoppedAtMs = restored.forwardingStoppedAtMs;
+      this.lastRefreshAtMs = restored.lastRefreshAtMs;
       this.forwarder.restoreTotals(restored.forwarded);
       this.verdicts = await this.files.readVerdicts(KEEP_VERDICTS);
       for (const verdict of this.verdicts) this.remember(verdict);
@@ -218,7 +224,7 @@ export class AlibiService {
     if (path) this.startRecording(path, restored !== undefined);
     this.cancelTick = this.clock.every(TICK_MS, () => this.tick());
     this.ensureSwitchOff();
-    if (this.endReadPending) void this.readResults('watch-end');
+    if (this.endReadPending) this.scheduleEndRead();
     this.schedulePersist();
   }
 
@@ -316,7 +322,7 @@ export class AlibiService {
     const group = verdict.evaluation ? (verdict.flagOn ? this.window.flagOn : this.window.stable) : this.window.unflagged;
     group.durations.push(verdict.durationMs);
     if (verdict.failed) group.failures += 1;
-    if (verdict.evaluation) this.forwarder.add(this.eventsFor(verdict, verdict.evaluation.identity));
+    if (verdict.evaluation && this.forwardingStoppedAtMs === undefined) this.forwarder.add(this.eventsFor(verdict, verdict.evaluation.identity));
   }
 
   private remember(verdict: TraceVerdict): void {
@@ -345,7 +351,7 @@ export class AlibiService {
         event: names.exposure,
         identifier,
         feature_name: verdict.evaluation.flag,
-        value: verdict.evaluation.variation,
+        value: verdict.evaluation.variation === this.config.guard.stableVariation ? CONTROL_VARIANT : verdict.evaluation.variation,
         timestamp,
       },
     ];
@@ -380,8 +386,6 @@ export class AlibiService {
     this.lastRecord = record;
     this.records.save(record);
     this.log.info(`record ${record.id} written: ${record.label}`);
-    this.endReadPending = true;
-    void this.readResults('watch-end');
   }
 
   private broadcast(event: StreamEvent): void {
@@ -404,7 +408,7 @@ export class AlibiService {
     this.window = { flagOn: emptyBucket(), stable: emptyBucket(), unflagged: emptyBucket() };
     if (this.ticks % EVENTS_LINE_EVERY_TICKS === 0) {
       const { sent, accepted, rejected, failed } = this.forwarder.totals;
-      this.note({ kind: 'flagsmith', atMs: this.stamp(), what: 'events', ok: failed === 0, detail: `${accepted} of ${sent} events accepted, ${rejected} rejected, ${failed} failed`, data: { sent, accepted, rejected, failed } });
+      this.note({ kind: 'flagsmith', atMs: this.stamp(), what: 'events', ok: failed === 0, detail: `${accepted} of ${sent} events accepted, ${rejected} rejected, ${failed} failed${this.forwardingStoppedAtMs === undefined ? '' : '; sending stopped at the switch-off'}`, data: { sent, accepted, rejected, failed, ...(this.forwardingStoppedAtMs === undefined ? {} : { forwardingStoppedAtMs: this.forwardingStoppedAtMs }) } });
     }
   }
 
@@ -458,8 +462,14 @@ export class AlibiService {
         if (passed) {
           const detail = `${flag} ${done} in Flagsmith; ${summary}`;
           this.note({ kind: 'flagsmith', atMs: now, what: 'switch-off', ok: true, detail });
+          // With the rollout at 0% nobody is in the experiment any more: an SDK's getExperimentFlag would report
+          // "not in the experiment" and track nothing. Flagsmith sets aside identities seen in more than one variant,
+          // so exposures and metrics after this point would shrink the new version's arm. Events queued before this
+          // moment are still sent; requests keep feeding the rule, the watch and the recording.
+          this.forwardingStoppedAtMs = now;
           this.emit(this.guard.confirmSwitchOff(now, true, detail));
-          void this.readResults('switch-off');
+          this.endReadPending = true;
+          this.scheduleEndRead();
           return;
         }
         reason = `${check.checked - check.stable} of ${check.checked} identities checked still get the new version`;
@@ -483,58 +493,100 @@ export class AlibiService {
   // ---- Flagsmith's own numbers ----
 
   /**
-   * Reads the experiment's results. Flagsmith allows one refresh per 300 seconds: the read at the
-   * switch-off is skipped when that is not allowed; the read at the end of the watch waits for it.
-   * A refusal or a failure is retried once, never in a loop.
+   * Flagsmith allows one refresh of the results per 300 seconds, and the watch lasts as long, so the guard reads
+   * once: shortly before the watch ends, so the numbers are in the record when the label is written. A refusal or
+   * a failure is retried once, after the time Flagsmith names or 30 seconds, and the record is then updated.
    */
-  private async readResults(reason: 'switch-off' | 'watch-end', retriesLeft = 1): Promise<void> {
-    const generation = this.generation;
-    const finish = (): void => {
-      if (reason === 'watch-end') this.endReadPending = false;
-      this.schedulePersist();
-    };
-    const now = this.clock.now();
-    if (this.nextRefreshAtMs !== undefined && now < this.nextRefreshAtMs) {
-      if (reason === 'switch-off') return;
-      this.cancelResults = this.clock.after(this.nextRefreshAtMs - now, () => void this.readResults(reason, retriesLeft));
-      return;
-    }
-    let problem: string;
-    let retryAfterMs = 30000;
+  private scheduleEndRead(): void {
+    const endsAt = this.guard.state.watchEndsAtMs ?? this.clock.now();
+    const delay = this.guard.phase === 'closed' ? 0 : Math.max(0, endsAt - END_READ_LEAD_MS - this.clock.now());
+    this.cancelResults = this.clock.after(delay, () => void this.readResults(1, true));
+  }
+
+  /** One try at refreshing and reading the results: the summary, or why there is none and when to try again. */
+  private async attemptResults(refresh: boolean): Promise<{ summary: FlagsmithExperimentSummary } | { problem: string; retryAfterMs: number; refreshAgain: boolean }> {
     try {
-      const outcome = await this.api.refreshResults();
-      if (outcome.limited) {
-        this.nextRefreshAtMs = this.clock.now() + outcome.retryAfterMs + REFRESH_MARGIN_MS;
-        retryAfterMs = outcome.retryAfterMs + REFRESH_MARGIN_MS;
-        problem = 'Flagsmith limits how often results can be refreshed';
-      } else {
-        this.nextRefreshAtMs = this.clock.now() + REFRESH_LIMIT_MS + REFRESH_MARGIN_MS;
-        let read = await this.api.readResults(this.clock.now());
-        for (let wait = 0; !read.fresh && wait < 5; wait += 1) {
-          await sleep(this.clock, 1000);
-          read = await this.api.readResults(this.clock.now());
+      if (refresh) {
+        const outcome = await this.api.refreshResults();
+        if (outcome.limited) {
+          return { problem: 'Flagsmith limits how often results can be refreshed', retryAfterMs: outcome.retryAfterMs + REFRESH_MARGIN_MS, refreshAgain: true };
         }
-        if (generation !== this.generation) return;
-        this.results = read.summary;
-        const at = this.stamp();
-        this.note({ kind: 'flagsmith', atMs: at, what: 'results', ok: true, detail: reason === 'switch-off' ? 'read at the switch-off' : 'read at the end of the watch', data: read.summary });
-        if (reason === 'watch-end' && this.lastRecord) {
-          this.lastRecord = { ...this.lastRecord, flagsmith: read.summary };
-          this.records.save(this.lastRecord);
-        }
-        return finish();
+        this.lastRefreshAtMs = this.clock.now();
       }
+      let read = await this.api.readResults(this.clock.now());
+      for (let wait = 0; !read.fresh && wait < 15; wait += 1) {
+        await sleep(this.clock, 1000);
+        read = await this.api.readResults(this.clock.now());
+      }
+      // refreshed, but Flagsmith has not finished: the next try reads again without asking for another refresh
+      if (read.summary.variations.length === 0) return { problem: 'Flagsmith has no results for the experiment yet', retryAfterMs: 30000, refreshAgain: false };
+      return { summary: read.summary };
     } catch (error) {
-      problem = reasonOf(error);
+      return { problem: reasonOf(error), retryAfterMs: 30000, refreshAgain: true };
     }
+  }
+
+  private resultsDetail(when: string): string {
+    const stopped = this.forwardingStoppedAtMs;
+    return stopped === undefined ? when : `${when}; events were sent to Flagsmith only until the switch-off at ${new Date(stopped).toISOString().slice(11, 19)} UTC, so these numbers describe the experiment as it stood then`;
+  }
+
+  private async readResults(retriesLeft: number, refresh: boolean): Promise<void> {
+    if (this.reading) return;
+    this.reading = true;
+    const generation = this.generation;
+    const outcome = await this.attemptResults(refresh);
     if (generation !== this.generation) return;
-    this.log.warn(`Flagsmith results were not read: ${problem}`);
-    this.note({ kind: 'flagsmith', atMs: this.stamp(), what: 'results', ok: false, detail: problem });
-    if (reason === 'watch-end' && retriesLeft > 0) {
-      this.cancelResults = this.clock.after(retryAfterMs, () => void this.readResults(reason, retriesLeft - 1));
-      return;
+    this.reading = false;
+    if ('summary' in outcome) {
+      this.results = outcome.summary;
+      this.endReadPending = false;
+      this.note({ kind: 'flagsmith', atMs: this.stamp(), what: 'results', ok: true, detail: this.resultsDetail('read at the end of the watch'), data: outcome.summary });
+      if (this.lastRecord) {
+        this.lastRecord = { ...this.lastRecord, flagsmith: outcome.summary };
+        this.records.save(this.lastRecord);
+      }
+    } else {
+      this.log.warn(`Flagsmith results were not read: ${outcome.problem}`);
+      this.note({ kind: 'flagsmith', atMs: this.stamp(), what: 'results', ok: false, detail: outcome.problem });
+      if (retriesLeft > 0) this.cancelResults = this.clock.after(outcome.retryAfterMs, () => void this.readResults(retriesLeft - 1, outcome.refreshAgain));
+      else this.endReadPending = false;
     }
-    finish();
+    this.schedulePersist();
+  }
+
+  /**
+   * Called by the load script at the end of a scenario. A run that never switched the flag off has no record, so
+   * its Flagsmith numbers are read here, once (waiting, up to the 300 second limit, if a refresh just happened).
+   * Either way the recording is then closed.
+   */
+  async finish(): Promise<{ resultsRead: boolean }> {
+    const generation = this.generation;
+    let resultsRead = false;
+    await this.forwarder.flush();
+    if (this.guard.phase === 'armed') {
+      for (let attempt = 0; attempt < 2 && !resultsRead && generation === this.generation; attempt += 1) {
+        const wait = this.lastRefreshAtMs === undefined ? 0 : this.lastRefreshAtMs + 300000 + REFRESH_MARGIN_MS - this.clock.now();
+        if (wait > 0) await sleep(this.clock, wait);
+        const outcome = await this.attemptResults(true);
+        if ('summary' in outcome) {
+          this.results = outcome.summary;
+          resultsRead = true;
+          this.note({ kind: 'flagsmith', atMs: this.stamp(), what: 'results', ok: true, detail: 'read at the end of the run', data: outcome.summary });
+        } else {
+          this.log.warn(`Flagsmith results were not read: ${outcome.problem}`);
+          this.note({ kind: 'flagsmith', atMs: this.stamp(), what: 'results', ok: false, detail: outcome.problem });
+          if (outcome.retryAfterMs > 300000 + REFRESH_MARGIN_MS) break;
+          await sleep(this.clock, outcome.retryAfterMs);
+        }
+      }
+    }
+    const recorder = this.recorder;
+    this.recorder = undefined;
+    this.run = { ...this.run, recording: false };
+    await recorder?.close();
+    this.schedulePersist();
+    return { resultsRead };
   }
 
   // ---- state, records, world ----
@@ -545,6 +597,7 @@ export class AlibiService {
       state,
       flagsmith: {
         forwarded: this.forwarder.totals,
+        ...(this.forwardingStoppedAtMs === undefined ? {} : { forwardingStoppedAtMs: this.forwardingStoppedAtMs }),
         switchOff: { requested: this.switchOff.requested, confirmed: state.switchOffConfirmed, detail: this.switchOff.detail },
         ...(this.results ? { results: this.results } : {}),
       },
@@ -609,6 +662,8 @@ export class AlibiService {
     this.switchOff = { requested: false, detail: '' };
     this.results = undefined;
     this.endReadPending = false;
+    this.reading = false;
+    this.forwardingStoppedAtMs = undefined;
     this.lastRecord = undefined;
     this.ticks = 0;
     this.lastDrainMs = 0;
@@ -663,10 +718,11 @@ export class AlibiService {
       receiver: this.receiver,
     };
     if (this.results) saved.results = this.results;
-    if (this.nextRefreshAtMs !== undefined) saved.nextRefreshAtMs = this.nextRefreshAtMs;
     if (this.lastRecord) saved.recordId = this.lastRecord.id;
     if (this.lastSpanAtMs !== undefined) saved.lastSpanAtMs = this.lastSpanAtMs;
     if (this.recordingPath) saved.recordingPath = this.recordingPath;
+    if (this.forwardingStoppedAtMs !== undefined) saved.forwardingStoppedAtMs = this.forwardingStoppedAtMs;
+    if (this.lastRefreshAtMs !== undefined) saved.lastRefreshAtMs = this.lastRefreshAtMs;
     this.files.writeState(saved);
   }
 }

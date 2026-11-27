@@ -2,12 +2,13 @@
 // Drives steady shop traffic and the three scripted scenarios against the compose stack.
 // Run it on the machine that runs the stack, from the repository root:
 //
-//   node load/run.mjs <outage|coupon-bug|degraded-host> [--rps 8] [--minutes N] [--out runs/<name>.world.jsonl]
-//   (degraded-host also takes --cpus, the CPU limit it puts on the shop, default 0.15)
+//   node load/run.mjs <outage|coupon-bug|degraded-host> [--rps 2] [--minutes N] [--out runs/<name>.world.jsonl]
+//   (degraded-host also takes --cpus, the CPU limit it puts on the shop, default 0.05)
 //   node load/run.mjs reset
 //
 // Environment: SHOP_URL (default http://127.0.0.1:8080), ALIBI_URL (when set, every world line is also
-// posted to $ALIBI_URL/api/world).
+// posted to $ALIBI_URL/api/world, and at the end of the run $ALIBI_URL/api/finish is called so Alibi reads
+// Flagsmith's numbers and closes its recording). ALIBI_CONTROL_TOKEN, when set, is sent as a bearer token.
 import { execFile } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -26,7 +27,7 @@ const SEED = 20261127;
 const IDENTITIES = 600;
 const COUPON = 'SAVE10';
 const COUPON_SHARE = 0.2;
-const THROTTLED_CPUS = '0.15';
+const THROTTLED_CPUS = '0.05';
 const FLAGGED_FAILURES_BEFORE_WATCH = 16;
 const WATCH_MS = 6 * 60_000;
 
@@ -79,6 +80,22 @@ async function waitUntilHealthy(service, seconds = 60) {
 
 // ---------------------------------------------------------------- world lines
 
+function alibiHeaders() {
+  const token = process.env.ALIBI_CONTROL_TOKEN;
+  return { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) };
+}
+
+/** Tells Alibi the run is over: it reads Flagsmith's numbers if no record was opened, and closes its recording. */
+async function finishAlibi() {
+  if (!ALIBI_URL) return;
+  try {
+    const res = await fetch(`${ALIBI_URL}/api/finish`, { method: 'POST', headers: alibiHeaders(), body: '{}', signal: AbortSignal.timeout(7 * 60_000) });
+    if (!res.ok) console.error(`Alibi did not finish the run: HTTP ${res.status}`);
+  } catch (error) {
+    console.error(`Alibi did not finish the run: ${error.message}`);
+  }
+}
+
 function makeWorld(outPath) {
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, '');
@@ -91,7 +108,7 @@ function makeWorld(outPath) {
     try {
       const res = await fetch(`${ALIBI_URL}/api/world`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: alibiHeaders(),
         body: json,
         signal: AbortSignal.timeout(5000),
       });
@@ -218,7 +235,7 @@ const scenarios = {
     minutes: 9,
     async script({ world, traffic, totalMs }) {
       const started = Date.now();
-      await sleep(45_000);
+      await sleep(90_000);
       traffic.state.couponsOn = true;
       await world('Carts with the SAVE10 coupon began (about 1 in 5).');
       let announced = false;
@@ -229,7 +246,6 @@ const scenarios = {
         if (at && !announced) {
           announced = true;
           endAt = Math.max(endAt, at + WATCH_MS);
-          await world(`The ${FLAGGED_FAILURES_BEFORE_WATCH}th coupon failure on the new checkout happened.`);
         }
       }
     },
@@ -240,10 +256,10 @@ const scenarios = {
     minutes: 9,
     async script({ world, totalMs, args }) {
       const cpus = args.cpus ?? THROTTLED_CPUS;
-      await sleep(45_000);
+      await sleep(90_000);
       await limitShopCpu(cpus);
       await world(`The shop host was slowed down: the shop's CPU was limited to ${Math.round(Number(cpus) * 100)}% of one core.`);
-      await sleep(Math.max(0, totalMs - 45_000));
+      await sleep(Math.max(0, totalMs - 90_000));
     },
     async cleanup() {
       await unlimitShopCpu();
@@ -253,7 +269,7 @@ const scenarios = {
 
 async function runScenario(name, args) {
   const scenario = scenarios[name];
-  const rps = Number(args.rps ?? 8);
+  const rps = Number(args.rps ?? 2);
   const minutes = Number(args.minutes ?? scenario.minutes);
   const totalMs = minutes * 60_000;
   const out = resolve(args.out ?? join('runs', `${name}.world.jsonl`));
@@ -274,6 +290,7 @@ async function runScenario(name, args) {
     await traffic.stop();
     await scenario.cleanup();
     await world(`Run "${name}" ended.`);
+    await finishAlibi();
   }
   console.log(summary(name, traffic.stats, (Date.now() - startedAt) / 1000));
   console.log(`World lines are in ${out}`);
@@ -331,7 +348,7 @@ try {
   if (command === 'reset') await reset();
   else if (scenarios[command]) await runScenario(command, args);
   else {
-    console.error('Usage: node load/run.mjs <outage|coupon-bug|degraded-host|reset> [--rps 8] [--minutes N] [--out file] [--cpus 0.15]');
+    console.error('Usage: node load/run.mjs <outage|coupon-bug|degraded-host|reset> [--rps 2] [--minutes N] [--out file] [--cpus 0.05]');
     process.exitCode = 2;
   }
 } catch (error) {

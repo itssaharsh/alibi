@@ -163,12 +163,13 @@ export function createGuardServer(service: AlibiService, config: ServiceConfig, 
         throw error;
       }
     }
-    if (path === '/api/world' || path === '/api/arm') {
+    if (path === '/api/world' || path === '/api/arm' || path === '/api/finish') {
       if (method !== 'POST') throw new HttpError(405, 'use POST');
       if (!authorised(req)) throw new HttpError(401, 'the control token is missing or wrong');
       const body = await readJson(req, SMALL_BODY_BYTES);
       const fields = typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : undefined;
       if (!fields) throw new HttpError(400, 'send a JSON object');
+      if (path === '/api/finish') return json(res, 200, { ok: true, ...(await service.finish()) });
       if (path === '/api/world') {
         if (typeof fields.text !== 'string' || fields.text.trim() === '' || fields.text.length > 500) {
           throw new HttpError(400, 'text must be a sentence of up to 500 characters');
