@@ -51,7 +51,7 @@ describe('after a finished run', () => {
     const res = await fetch(`${api.url}/api/state`);
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
     const body = (await res.json()) as Record<string, any>;
-    expect(Object.keys(body).sort()).toEqual(['flagsmith', 'lastSpanAtMs', 'receiver', 'records', 'recent', 'run', 'state', 'timeline'].sort());
+    expect(Object.keys(body).sort()).toEqual(['baseline', 'flagsmith', 'lastSpanAtMs', 'receiver', 'records', 'recent', 'run', 'state', 'timeline'].sort());
     expect(body.state.phase).toBe('closed');
     expect(body.state.label).toBe('probably the feature');
     expect(body.flagsmith.forwarded.accepted).toBeGreaterThan(300);

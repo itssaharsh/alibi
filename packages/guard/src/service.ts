@@ -2,7 +2,9 @@ import { join } from 'node:path';
 import {
   Guard,
   TraceAssembler,
+  buildBaseline,
   buildRecord,
+  type BaselineRow,
   describeEvent,
   flattenOtlp,
   judgeTrace,
@@ -72,6 +74,8 @@ export interface StatePayload {
   /** The last 200 verdicts that failed or had the flag on. */
   recent?: TraceVerdict[];
   timeline: TimelineEntry[];
+  /** Flag-on failing points against the same points in stable requests, from the verdicts so far; the record's table, before there is a record. */
+  baseline: BaselineRow[];
   records: RecordSummary[];
   lastSpanAtMs?: number;
   run: RunInfo;
@@ -160,6 +164,7 @@ export class AlibiService {
   private switchOff = { requested: false, detail: '' };
   private results: FlagsmithExperimentSummary | undefined;
   private reading = false;
+  private baselineCache: { key: string; at: number; rows: BaselineRow[] } | undefined;
   private observed = false;
   private lastRefreshAtMs: number | undefined;
   private forwardingStoppedAtMs: number | undefined;
@@ -665,6 +670,7 @@ export class AlibiService {
         ...(this.results ? { results: this.results } : {}),
       },
       timeline: this.timeline.slice(-KEEP_TIMELINE),
+      baseline: this.baselineRows(),
       records: this.records.list(),
       run: this.run,
       receiver: this.receiver,
@@ -672,6 +678,21 @@ export class AlibiService {
     if (options.recent) payload.recent = [...this.recent];
     if (this.lastSpanAtMs !== undefined) payload.lastSpanAtMs = this.lastSpanAtMs;
     return payload;
+  }
+
+  /**
+   * The baseline table, by the engine's own function, over the period the record would use (up to the switch-off when
+   * there is one). It is worked out again only when a request has been judged since, and at most once a second.
+   */
+  private baselineRows(): BaselineRow[] {
+    const upTo = this.guard.state.switchedOffAtMs;
+    const key = `${this.verdicts.length}:${upTo ?? ''}`;
+    const now = this.clock.now();
+    const cached = this.baselineCache;
+    if (cached && (cached.key === key || now - cached.at < 1000)) return cached.rows;
+    const rows = buildBaseline(this.verdicts, upTo);
+    this.baselineCache = { key, at: now, rows };
+    return rows;
   }
 
   get phase(): string {
@@ -716,6 +737,7 @@ export class AlibiService {
     this.guard = new Guard(this.config.guard);
     this.assembler = new TraceAssembler();
     this.verdicts = [];
+    this.baselineCache = undefined;
     this.unsavedVerdicts = [];
     this.timeline = [];
     this.recent = [];

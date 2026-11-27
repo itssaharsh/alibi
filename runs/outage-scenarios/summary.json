@@ -1,0 +1,1115 @@
+{
+  "harnessCommit": "10b9a0552f1cec65ad947ed5d944cef734d9cc70",
+  "counted": [
+    {
+      "id": "O1",
+      "scenario": "shared-service-outage",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T10:08:46.174Z",
+      "requests": 601,
+      "newCheckoutFailures": {
+        "dependency": 91
+      },
+      "stableFailures": {
+        "dependency": 90
+      },
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": false,
+      "rule20AtS": null,
+      "widestGapPoints": 16.4,
+      "rule10AtS": 133.8,
+      "plainRuleAtS": 98.8,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {
+        "services": [
+          {
+            "service": "tax",
+            "stoppedAt": 1795774216468,
+            "stoppedRunning": false,
+            "startedAt": 1795774312350,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 1
+    },
+    {
+      "id": "O2",
+      "scenario": "feature-service-outage",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T10:15:21.640Z",
+      "requests": 601,
+      "newCheckoutFailures": {
+        "dependency": 86
+      },
+      "stableFailures": {},
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": true,
+      "rule20AtS": 103,
+      "widestGapPoints": 100,
+      "rule10AtS": 99.8,
+      "plainRuleAtS": 99.8,
+      "alibiRight": true,
+      "rule20Right": false,
+      "checks": {
+        "services": [
+          {
+            "service": "rules",
+            "stoppedAt": 1795774611929,
+            "stoppedRunning": false,
+            "startedAt": 1795774707772,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 1
+    },
+    {
+      "id": "O3",
+      "scenario": "database-flaky",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T10:21:55.445Z",
+      "requests": 721,
+      "newCheckoutFailures": {
+        "dependency": 46
+      },
+      "stableFailures": {
+        "dependency": 61
+      },
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": false,
+      "rule20AtS": null,
+      "widestGapPoints": 16.9,
+      "rule10AtS": 118.8,
+      "plainRuleAtS": 105.8,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {
+        "proxy": {
+          "toxic": "reset_peer",
+          "toxicity": 0.35,
+          "addedAt": 1795775005488,
+          "listedWhileOn": true,
+          "removedAt": 1795775185486,
+          "listedAfter": false
+        }
+      },
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 1
+    },
+    {
+      "id": "O4",
+      "scenario": "shared-service-outage-low-traffic",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T10:29:29.230Z",
+      "requests": 301,
+      "newCheckoutFailures": {
+        "dependency": 45
+      },
+      "stableFailures": {
+        "dependency": 45
+      },
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": true,
+      "rule20AtS": 134.8,
+      "widestGapPoints": 21.2,
+      "rule10AtS": 106.8,
+      "plainRuleAtS": null,
+      "alibiRight": true,
+      "rule20Right": false,
+      "checks": {
+        "services": [
+          {
+            "service": "tax",
+            "stoppedAt": 1795775459523,
+            "stoppedRunning": false,
+            "startedAt": 1795775555365,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 1
+    },
+    {
+      "id": "M1",
+      "scenario": "database-outage-with-bug",
+      "truth": "flagged path (and infrastructure)",
+      "shouldAct": true,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T10:36:03.348Z",
+      "requests": 841,
+      "newCheckoutFailures": {
+        "flagged-path": 50,
+        "dependency": 97
+      },
+      "stableFailures": {
+        "dependency": 84
+      },
+      "alibiActed": true,
+      "alibiAtS": 272.9,
+      "rule20Acted": true,
+      "rule20AtS": 278.9,
+      "widestGapPoints": 31.6,
+      "rule10AtS": 102.8,
+      "plainRuleAtS": 97,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {
+        "services": [
+          {
+            "service": "shop-db",
+            "stoppedAt": 1795775853679,
+            "stoppedRunning": false,
+            "startedAt": 1795775949711,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 123,
+      "couponCartsNewCheckout": 72,
+      "voidReason": null,
+      "round": 1
+    },
+    {
+      "id": "M2",
+      "scenario": "shared-service-outage-with-bug",
+      "truth": "flagged path (and infrastructure)",
+      "shouldAct": true,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T10:44:36.324Z",
+      "requests": 841,
+      "newCheckoutFailures": {
+        "dependency": 83,
+        "flagged-path": 36
+      },
+      "stableFailures": {
+        "dependency": 98
+      },
+      "alibiActed": true,
+      "alibiAtS": 285,
+      "rule20Acted": true,
+      "rule20AtS": 314.9,
+      "widestGapPoints": 20.7,
+      "rule10AtS": 117.8,
+      "plainRuleAtS": 98.8,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {
+        "services": [
+          {
+            "service": "tax",
+            "stoppedAt": 1795776366632,
+            "stoppedRunning": false,
+            "startedAt": 1795776462456,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 122,
+      "couponCartsNewCheckout": 50,
+      "voidReason": null,
+      "round": 1
+    },
+    {
+      "id": "M3",
+      "scenario": "rare-bug",
+      "truth": "flagged path",
+      "shouldAct": true,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T10:53:09.098Z",
+      "requests": 1441,
+      "newCheckoutFailures": {
+        "flagged-path": 33
+      },
+      "stableFailures": {},
+      "alibiActed": true,
+      "alibiAtS": 338,
+      "rule20Acted": false,
+      "rule20AtS": null,
+      "widestGapPoints": 9.5,
+      "rule10AtS": 313.9,
+      "plainRuleAtS": null,
+      "alibiRight": true,
+      "rule20Right": false,
+      "checks": {},
+      "couponCarts": 49,
+      "couponCartsNewCheckout": 33,
+      "voidReason": null,
+      "round": 1
+    },
+    {
+      "id": "H1",
+      "scenario": "healthy",
+      "truth": "healthy",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T11:06:41.818Z",
+      "requests": 601,
+      "newCheckoutFailures": {},
+      "stableFailures": {},
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": false,
+      "rule20AtS": null,
+      "widestGapPoints": 0,
+      "rule10AtS": null,
+      "plainRuleAtS": null,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {},
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 1
+    },
+    {
+      "id": "O1",
+      "scenario": "shared-service-outage",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T11:13:19.757Z",
+      "requests": 601,
+      "newCheckoutFailures": {
+        "dependency": 94
+      },
+      "stableFailures": {
+        "dependency": 87
+      },
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": false,
+      "rule20AtS": null,
+      "widestGapPoints": 12.2,
+      "rule10AtS": 99.8,
+      "plainRuleAtS": 96.8,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {
+        "services": [
+          {
+            "service": "tax",
+            "stoppedAt": 1795778090067,
+            "stoppedRunning": false,
+            "startedAt": 1795778185918,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 2
+    },
+    {
+      "id": "O2",
+      "scenario": "feature-service-outage",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T11:19:54.225Z",
+      "requests": 601,
+      "newCheckoutFailures": {
+        "dependency": 98
+      },
+      "stableFailures": {},
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": true,
+      "rule20AtS": 103.8,
+      "widestGapPoints": 100,
+      "rule10AtS": 98.8,
+      "plainRuleAtS": 99.8,
+      "alibiRight": true,
+      "rule20Right": false,
+      "checks": {
+        "services": [
+          {
+            "service": "rules",
+            "stoppedAt": 1795778484508,
+            "stoppedRunning": false,
+            "startedAt": 1795778580393,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 2
+    },
+    {
+      "id": "O3",
+      "scenario": "database-flaky",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T11:26:29.085Z",
+      "requests": 721,
+      "newCheckoutFailures": {
+        "dependency": 76
+      },
+      "stableFailures": {
+        "dependency": 63
+      },
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": false,
+      "rule20AtS": null,
+      "widestGapPoints": 6.9,
+      "rule10AtS": null,
+      "plainRuleAtS": 107.8,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {
+        "proxy": {
+          "toxic": "reset_peer",
+          "toxicity": 0.35,
+          "addedAt": 1795778879113,
+          "listedWhileOn": true,
+          "removedAt": 1795779059110,
+          "listedAfter": false
+        }
+      },
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 2
+    },
+    {
+      "id": "O4",
+      "scenario": "shared-service-outage-low-traffic",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T11:34:03.342Z",
+      "requests": 301,
+      "newCheckoutFailures": {
+        "dependency": 42
+      },
+      "stableFailures": {
+        "dependency": 48
+      },
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": false,
+      "rule20AtS": null,
+      "widestGapPoints": 12.1,
+      "rule10AtS": 144.7,
+      "plainRuleAtS": null,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {
+        "services": [
+          {
+            "service": "tax",
+            "stoppedAt": 1795779333626,
+            "stoppedRunning": false,
+            "startedAt": 1795779429467,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 2
+    },
+    {
+      "id": "M1",
+      "scenario": "database-outage-with-bug",
+      "truth": "flagged path (and infrastructure)",
+      "shouldAct": true,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T11:40:37.076Z",
+      "requests": 841,
+      "newCheckoutFailures": {
+        "dependency": 84,
+        "flagged-path": 46
+      },
+      "stableFailures": {
+        "dependency": 97
+      },
+      "alibiActed": true,
+      "alibiAtS": 265.9,
+      "rule20Acted": true,
+      "rule20AtS": 229,
+      "widestGapPoints": 25.1,
+      "rule10AtS": 194.9,
+      "plainRuleAtS": 98.8,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {
+        "services": [
+          {
+            "service": "shop-db",
+            "stoppedAt": 1795779727430,
+            "stoppedRunning": false,
+            "startedAt": 1795779823469,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 122,
+      "couponCartsNewCheckout": 69,
+      "voidReason": null,
+      "round": 2
+    },
+    {
+      "id": "M2",
+      "scenario": "shared-service-outage-with-bug",
+      "truth": "flagged path (and infrastructure)",
+      "shouldAct": true,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T11:49:11.415Z",
+      "requests": 841,
+      "newCheckoutFailures": {
+        "dependency": 90,
+        "flagged-path": 39
+      },
+      "stableFailures": {
+        "dependency": 91
+      },
+      "alibiActed": true,
+      "alibiAtS": 283.9,
+      "rule20Acted": true,
+      "rule20AtS": 219.9,
+      "widestGapPoints": 22.6,
+      "rule10AtS": 200.9,
+      "plainRuleAtS": 100.8,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {
+        "services": [
+          {
+            "service": "tax",
+            "stoppedAt": 1795780241739,
+            "stoppedRunning": false,
+            "startedAt": 1795780337566,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 122,
+      "couponCartsNewCheckout": 60,
+      "voidReason": null,
+      "round": 2
+    },
+    {
+      "id": "M3",
+      "scenario": "rare-bug",
+      "truth": "flagged path",
+      "shouldAct": true,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T11:57:45.013Z",
+      "requests": 1440,
+      "newCheckoutFailures": {
+        "flagged-path": 24
+      },
+      "stableFailures": {},
+      "alibiActed": true,
+      "alibiAtS": 468,
+      "rule20Acted": false,
+      "rule20AtS": null,
+      "widestGapPoints": 8.3,
+      "rule10AtS": null,
+      "plainRuleAtS": null,
+      "alibiRight": true,
+      "rule20Right": false,
+      "checks": {},
+      "couponCarts": 49,
+      "couponCartsNewCheckout": 24,
+      "voidReason": null,
+      "round": 2
+    },
+    {
+      "id": "H1",
+      "scenario": "healthy",
+      "truth": "healthy",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T12:11:18.898Z",
+      "requests": 601,
+      "newCheckoutFailures": {},
+      "stableFailures": {},
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": false,
+      "rule20AtS": null,
+      "widestGapPoints": 0,
+      "rule10AtS": null,
+      "plainRuleAtS": null,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {},
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 2
+    },
+    {
+      "id": "O1",
+      "scenario": "shared-service-outage",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T12:17:57.258Z",
+      "requests": 601,
+      "newCheckoutFailures": {
+        "dependency": 92
+      },
+      "stableFailures": {
+        "dependency": 89
+      },
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": false,
+      "rule20AtS": null,
+      "widestGapPoints": 13.6,
+      "rule10AtS": 132,
+      "plainRuleAtS": 100.8,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {
+        "services": [
+          {
+            "service": "tax",
+            "stoppedAt": 1795781967562,
+            "stoppedRunning": false,
+            "startedAt": 1795782063410,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 3
+    },
+    {
+      "id": "O2",
+      "scenario": "feature-service-outage",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T12:24:32.606Z",
+      "requests": 601,
+      "newCheckoutFailures": {
+        "dependency": 84
+      },
+      "stableFailures": {},
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": true,
+      "rule20AtS": 106.8,
+      "widestGapPoints": 100,
+      "rule10AtS": 103.8,
+      "plainRuleAtS": 106.8,
+      "alibiRight": true,
+      "rule20Right": false,
+      "checks": {
+        "services": [
+          {
+            "service": "rules",
+            "stoppedAt": 1795782362900,
+            "stoppedRunning": false,
+            "startedAt": 1795782458760,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 3
+    },
+    {
+      "id": "O3",
+      "scenario": "database-flaky",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T12:31:07.515Z",
+      "requests": 721,
+      "newCheckoutFailures": {
+        "dependency": 63
+      },
+      "stableFailures": {
+        "dependency": 57
+      },
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": false,
+      "rule20AtS": null,
+      "widestGapPoints": 13.1,
+      "rule10AtS": 105.8,
+      "plainRuleAtS": 101,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {
+        "proxy": {
+          "toxic": "reset_peer",
+          "toxicity": 0.35,
+          "addedAt": 1795782757544,
+          "listedWhileOn": true,
+          "removedAt": 1795782937541,
+          "listedAfter": false
+        }
+      },
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 3
+    },
+    {
+      "id": "O4",
+      "scenario": "shared-service-outage-low-traffic",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T12:38:42.305Z",
+      "requests": 301,
+      "newCheckoutFailures": {
+        "dependency": 45
+      },
+      "stableFailures": {
+        "dependency": 45
+      },
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": false,
+      "rule20AtS": null,
+      "widestGapPoints": 8.7,
+      "rule10AtS": null,
+      "plainRuleAtS": null,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {
+        "services": [
+          {
+            "service": "tax",
+            "stoppedAt": 1795783212590,
+            "stoppedRunning": false,
+            "startedAt": 1795783308429,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 3
+    },
+    {
+      "id": "M1",
+      "scenario": "database-outage-with-bug",
+      "truth": "flagged path (and infrastructure)",
+      "shouldAct": true,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T12:45:17.064Z",
+      "requests": 841,
+      "newCheckoutFailures": {
+        "dependency": 79,
+        "flagged-path": 46
+      },
+      "stableFailures": {
+        "dependency": 102
+      },
+      "alibiActed": true,
+      "alibiAtS": 290,
+      "rule20Acted": true,
+      "rule20AtS": 308.9,
+      "widestGapPoints": 32.7,
+      "rule10AtS": 231.9,
+      "plainRuleAtS": 101.8,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {
+        "services": [
+          {
+            "service": "shop-db",
+            "stoppedAt": 1795783607415,
+            "stoppedRunning": false,
+            "startedAt": 1795783703455,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 122,
+      "couponCartsNewCheckout": 63,
+      "voidReason": null,
+      "round": 3
+    },
+    {
+      "id": "M2",
+      "scenario": "shared-service-outage-with-bug",
+      "truth": "flagged path (and infrastructure)",
+      "shouldAct": true,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T12:53:50.259Z",
+      "requests": 841,
+      "newCheckoutFailures": {
+        "dependency": 100,
+        "flagged-path": 45
+      },
+      "stableFailures": {
+        "dependency": 81
+      },
+      "alibiActed": true,
+      "alibiAtS": 295,
+      "rule20Acted": true,
+      "rule20AtS": 308.9,
+      "widestGapPoints": 23.6,
+      "rule10AtS": 214.9,
+      "plainRuleAtS": 99.8,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {
+        "services": [
+          {
+            "service": "tax",
+            "stoppedAt": 1795784120568,
+            "stoppedRunning": false,
+            "startedAt": 1795784216384,
+            "startedRunning": true
+          }
+        ]
+      },
+      "couponCarts": 122,
+      "couponCartsNewCheckout": 68,
+      "voidReason": null,
+      "round": 3
+    },
+    {
+      "id": "M3",
+      "scenario": "rare-bug",
+      "truth": "flagged path",
+      "shouldAct": true,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T13:02:23.082Z",
+      "requests": 1441,
+      "newCheckoutFailures": {
+        "flagged-path": 25
+      },
+      "stableFailures": {},
+      "alibiActed": true,
+      "alibiAtS": 505,
+      "rule20Acted": false,
+      "rule20AtS": null,
+      "widestGapPoints": 9.1,
+      "rule10AtS": null,
+      "plainRuleAtS": null,
+      "alibiRight": true,
+      "rule20Right": false,
+      "checks": {},
+      "couponCarts": 49,
+      "couponCartsNewCheckout": 25,
+      "voidReason": null,
+      "round": 3
+    },
+    {
+      "id": "H1",
+      "scenario": "healthy",
+      "truth": "healthy",
+      "shouldAct": false,
+      "flagsmithVersion": "2.295.2",
+      "date": "2026-11-27T13:15:55.932Z",
+      "requests": 601,
+      "newCheckoutFailures": {},
+      "stableFailures": {},
+      "alibiActed": false,
+      "alibiAtS": null,
+      "rule20Acted": false,
+      "rule20AtS": null,
+      "widestGapPoints": 0,
+      "rule10AtS": null,
+      "plainRuleAtS": null,
+      "alibiRight": true,
+      "rule20Right": true,
+      "checks": {},
+      "couponCarts": 0,
+      "couponCartsNewCheckout": 0,
+      "voidReason": null,
+      "round": 3
+    }
+  ],
+  "voids": [],
+  "earlierRunsScoredAfterTheFact": [
+    {
+      "run": "runs/outage.jsonl",
+      "scenario": "outage",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "alibiActed": false,
+      "alibiAtS": null,
+      "gapBeforeSwitchOffPoints": 18.1,
+      "rule20Acted": false,
+      "alibiRight": true,
+      "rule20Right": true,
+      "rule10AtS": 82.8,
+      "plainRuleAtS": 76.8
+    },
+    {
+      "run": "runs/coupon-bug.jsonl",
+      "scenario": "coupon-bug",
+      "truth": "flagged path",
+      "shouldAct": true,
+      "alibiActed": true,
+      "alibiAtS": 150.6,
+      "gapBeforeSwitchOffPoints": 34,
+      "rule20Acted": true,
+      "alibiRight": true,
+      "rule20Right": true,
+      "rule10AtS": 118,
+      "plainRuleAtS": 118.8
+    },
+    {
+      "run": "runs/slow-host.jsonl",
+      "scenario": "slow-host",
+      "truth": "infrastructure (the host)",
+      "shouldAct": false,
+      "alibiActed": true,
+      "alibiAtS": 108.8,
+      "gapBeforeSwitchOffPoints": 32.2,
+      "rule20Acted": true,
+      "alibiRight": false,
+      "rule20Right": false,
+      "rule10AtS": 96.8,
+      "plainRuleAtS": 96.8
+    },
+    {
+      "run": "repeat outage 1",
+      "scenario": "outage",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "alibiActed": false,
+      "alibiAtS": null,
+      "gapBeforeSwitchOffPoints": 1.3,
+      "rule20Acted": false,
+      "alibiRight": true,
+      "rule20Right": true,
+      "rule10AtS": null,
+      "plainRuleAtS": 71.8
+    },
+    {
+      "run": "repeat outage 2",
+      "scenario": "outage",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "alibiActed": false,
+      "alibiAtS": null,
+      "gapBeforeSwitchOffPoints": 17.8,
+      "rule20Acted": false,
+      "alibiRight": true,
+      "rule20Right": true,
+      "rule10AtS": 79.8,
+      "plainRuleAtS": 70.8
+    },
+    {
+      "run": "repeat outage 3",
+      "scenario": "outage",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "alibiActed": false,
+      "alibiAtS": null,
+      "gapBeforeSwitchOffPoints": 16.3,
+      "rule20Acted": false,
+      "alibiRight": true,
+      "rule20Right": true,
+      "rule10AtS": 174.9,
+      "plainRuleAtS": 72.8
+    },
+    {
+      "run": "repeat outage 4",
+      "scenario": "outage",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "alibiActed": false,
+      "alibiAtS": null,
+      "gapBeforeSwitchOffPoints": 3.2,
+      "rule20Acted": false,
+      "alibiRight": true,
+      "rule20Right": true,
+      "rule10AtS": null,
+      "plainRuleAtS": 71.8
+    },
+    {
+      "run": "repeat outage 5",
+      "scenario": "outage",
+      "truth": "infrastructure",
+      "shouldAct": false,
+      "alibiActed": false,
+      "alibiAtS": null,
+      "gapBeforeSwitchOffPoints": 16.8,
+      "rule20Acted": false,
+      "alibiRight": true,
+      "rule20Right": true,
+      "rule10AtS": 69.8,
+      "plainRuleAtS": 69.8
+    },
+    {
+      "run": "repeat coupon-bug 1",
+      "scenario": "coupon-bug",
+      "truth": "flagged path",
+      "shouldAct": true,
+      "alibiActed": true,
+      "alibiAtS": 150.7,
+      "gapBeforeSwitchOffPoints": 26.2,
+      "rule20Acted": true,
+      "alibiRight": true,
+      "rule20Right": true,
+      "rule10AtS": 115.8,
+      "plainRuleAtS": 115.8
+    },
+    {
+      "run": "repeat coupon-bug 2",
+      "scenario": "coupon-bug",
+      "truth": "flagged path",
+      "shouldAct": true,
+      "alibiActed": true,
+      "alibiAtS": 162.6,
+      "gapBeforeSwitchOffPoints": 26.8,
+      "rule20Acted": true,
+      "alibiRight": true,
+      "rule20Right": true,
+      "rule10AtS": 115.8,
+      "plainRuleAtS": 115.8
+    },
+    {
+      "run": "repeat coupon-bug 3",
+      "scenario": "coupon-bug",
+      "truth": "flagged path",
+      "shouldAct": true,
+      "alibiActed": true,
+      "alibiAtS": 157.6,
+      "gapBeforeSwitchOffPoints": 25.5,
+      "rule20Acted": true,
+      "alibiRight": true,
+      "rule20Right": true,
+      "rule10AtS": 118,
+      "plainRuleAtS": 118
+    },
+    {
+      "run": "repeat coupon-bug 4",
+      "scenario": "coupon-bug",
+      "truth": "flagged path",
+      "shouldAct": true,
+      "alibiActed": true,
+      "alibiAtS": 141.8,
+      "gapBeforeSwitchOffPoints": 26.6,
+      "rule20Acted": true,
+      "alibiRight": true,
+      "rule20Right": true,
+      "rule10AtS": 108.8,
+      "plainRuleAtS": 108.8
+    },
+    {
+      "run": "repeat coupon-bug 5",
+      "scenario": "coupon-bug",
+      "truth": "flagged path",
+      "shouldAct": true,
+      "alibiActed": true,
+      "alibiAtS": 161.6,
+      "gapBeforeSwitchOffPoints": 23.3,
+      "rule20Acted": true,
+      "alibiRight": true,
+      "rule20Right": true,
+      "rule10AtS": 119,
+      "plainRuleAtS": 122.8
+    },
+    {
+      "run": "repeat degraded-host 1",
+      "scenario": "slow-host",
+      "truth": "infrastructure (the host)",
+      "shouldAct": false,
+      "alibiActed": true,
+      "alibiAtS": 111.6,
+      "gapBeforeSwitchOffPoints": 35.7,
+      "rule20Acted": true,
+      "alibiRight": false,
+      "rule20Right": false,
+      "rule10AtS": 103,
+      "plainRuleAtS": 103
+    },
+    {
+      "run": "repeat degraded-host 2",
+      "scenario": "slow-host",
+      "truth": "infrastructure (the host)",
+      "shouldAct": false,
+      "alibiActed": true,
+      "alibiAtS": 111.4,
+      "gapBeforeSwitchOffPoints": 38.6,
+      "rule20Acted": true,
+      "alibiRight": false,
+      "rule20Right": false,
+      "rule10AtS": 100,
+      "plainRuleAtS": 100
+    },
+    {
+      "run": "repeat degraded-host 3",
+      "scenario": "slow-host",
+      "truth": "infrastructure (the host)",
+      "shouldAct": false,
+      "alibiActed": true,
+      "alibiAtS": 109.7,
+      "gapBeforeSwitchOffPoints": 35.4,
+      "rule20Acted": true,
+      "alibiRight": false,
+      "rule20Right": false,
+      "rule10AtS": 97.8,
+      "plainRuleAtS": 97.8
+    },
+    {
+      "run": "repeat degraded-host 4",
+      "scenario": "slow-host",
+      "truth": "infrastructure (the host)",
+      "shouldAct": false,
+      "alibiActed": true,
+      "alibiAtS": 111.5,
+      "gapBeforeSwitchOffPoints": 33.8,
+      "rule20Acted": true,
+      "alibiRight": false,
+      "rule20Right": false,
+      "rule10AtS": 98.8,
+      "plainRuleAtS": 100.8
+    },
+    {
+      "run": "repeat degraded-host 5",
+      "scenario": "slow-host",
+      "truth": "infrastructure (the host)",
+      "shouldAct": false,
+      "alibiActed": true,
+      "alibiAtS": 110.7,
+      "gapBeforeSwitchOffPoints": 34.4,
+      "rule20Acted": true,
+      "alibiRight": false,
+      "rule20Right": false,
+      "rule10AtS": 98,
+      "plainRuleAtS": 98
+    }
+  ]
+}
