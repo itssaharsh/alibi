@@ -47,6 +47,10 @@ export interface OriginSpan {
   class: Exclude<FailureClass, 'mixed'>;
   /** True when the span, or an ancestor below the request root, is marked as the flagged path. */
   onFlaggedPath: boolean;
+  /** Who a dependency call talks to, for example `rules:3000`. */
+  target?: string;
+  /** The name to show people when the span name alone does not say which service it was. */
+  label?: string;
   /** Short machine reason, for example `db.system=postgresql ECONNREFUSED`. */
   detail: string;
   durationMs: number;
@@ -67,6 +71,10 @@ export interface SpanPoint {
   error: boolean;
   /** True when the span is a call to a dependency (a database, another service, a queue). */
   dependency?: boolean;
+  /** Who a dependency call talks to, so two services behind the same span name stay apart. */
+  target?: string;
+  /** The name to show people when the span name alone does not say which service it was. */
+  label?: string;
 }
 
 /** The engine's reading of one finished request. */

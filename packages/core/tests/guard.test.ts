@@ -416,7 +416,7 @@ describe('the notice for a dependency only the feature calls', () => {
 
   it('does not fire when the stable version also runs that span', () => {
     const guard = new Guard(config());
-    const stable = { ...makeVerdict({ endMs: START, variation: STABLE }), points: [{ name: 'pg.query:SELECT price', durationMs: 5, error: false }] };
+    const stable = { ...makeVerdict({ endMs: START, variation: STABLE }), points: [{ name: 'pg.query:SELECT price', durationMs: 5, error: false, dependency: true, target: 'postgresql shop-db:5432' }] };
     guard.ingest(stable, START);
     for (let n = 1; n <= 10; n += 1) guard.ingest(refusedFromFlaggedPath(n), START + n * 1000);
     expect(guard.state.notices).toBeUndefined();
@@ -506,5 +506,37 @@ describe('the notice for a dependency both versions call', () => {
     const uneven = guard.state.notices?.filter((n) => n.kind === 'dependency-uneven') ?? [];
     expect(uneven.map((n) => n.span)).toEqual(['pg.query:SELECT shop']);
     expect(guard.state.counted).toBe(0);
+  });
+});
+
+describe('two dependencies with the same span name are told apart by their target', () => {
+  /** Both versions call the tax service; only the new checkout calls the rules service. Both are named GET. */
+  function feed(planted: typeof faults.rulesDown | typeof faults.taxDown, n = 40) {
+    const guard = new Guard(config());
+    const events: GuardEvent[] = [];
+    for (let k = 1; k <= n; k += 1) {
+      for (const variation of [V2, STABLE]) {
+        const failing = variation === V2 || planted.at === 'tax-call';
+        const trace = checkoutTrace({ n: k * 2 + (variation === V2 ? 0 : 1), startMs: START + k * 1000, variation, faults: failing ? [planted] : [] });
+        const v = judgeTrace(trace, config());
+        if (v) events.push(...guard.ingest(v, v.endMs));
+      }
+    }
+    return { guard, notices: events.filter((e) => e.type === 'notice') };
+  }
+
+  it('the rules service stopped: only the flagged path calls it, and the sentence is true', () => {
+    const { guard, notices } = feed(faults.rulesDown);
+    expect(notices).toHaveLength(1);
+    expect(guard.state.notices?.[0]).toMatchObject({ kind: 'flagged-path-only', span: 'GET rules:3000', failures: 5 });
+    expect(guard.state.notices?.[0]?.text).toBe(
+      '5 requests with the flag on failed in GET rules:3000, a dependency that only the flagged path calls and that was unavailable. By the rule these do not count toward the switch-off. The stable version never makes this call, so a person should look.',
+    );
+    expect(guard.state.notices?.some((n) => n.text.includes('both versions call'))).toBe(false);
+    expect(guard.state.counted).toBe(0);
+  });
+
+  it('the shared tax service stopped for both versions: no notice, the arms fail alike', () => {
+    expect(feed(faults.taxDown).notices).toEqual([]);
   });
 });

@@ -8,6 +8,7 @@ import type {
   TraceVerdict,
 } from './types.js';
 import { formatMs } from './stats.js';
+import { dependencyTarget } from './target.js';
 
 /** The attribute the application puts on the span that wraps the feature's own code. */
 export const FLAGGED_PATH_ATTRIBUTE = 'alibi.flagged_path';
@@ -170,7 +171,7 @@ function findRoot(spans: readonly FlatSpan[], byId: ReadonlyMap<string, FlatSpan
 function clause(info: OriginInfo): string {
   const { origin, message, dependency } = info;
   if (dependency) {
-    const call = `${origin.name}, a dependency call (${dependency.descriptor})`;
+    const call = `${origin.label ?? origin.name}, a dependency call (${dependency.descriptor})`;
     if (origin.class === 'flagged-path') return `${call} on the flagged path: ${message}`;
     if (origin.class === 'server') return `${call} outside the flagged path: ${message}`;
     return `${call}: ${message}`;
@@ -264,7 +265,7 @@ export function judgeTrace(spans: readonly FlatSpan[], config: GuardConfig): Tra
     name: span.name,
     durationMs: span.durationMs,
     error: span.error,
-    ...(isDependencyCall(span) ? { dependency: true } : {}),
+    ...(isDependencyCall(span) ? { dependency: true, ...dependencyTarget(span) } : {}),
   }));
   const base = {
     traceId: root.traceId,
@@ -304,6 +305,7 @@ export function judgeTrace(spans: readonly FlatSpan[], config: GuardConfig): Tra
       service: span.service,
       class: klass,
       onFlaggedPath: onPath,
+      ...(dependency ? dependencyTarget(span) : undefined),
       detail: dependency ? `${dependency.descriptor} ${message}` : message,
       durationMs: span.durationMs,
     };

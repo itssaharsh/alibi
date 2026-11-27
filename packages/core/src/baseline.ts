@@ -1,9 +1,13 @@
 import type { BaselineRow, TraceVerdict } from './types.js';
 import { percentile95 } from './stats.js';
+import { dependencyKey } from './target.js';
 
 interface Point {
   route: string;
+  /** What people read: the span name, with the target when the name alone would not say it. */
   span: string;
+  name: string;
+  target?: string;
   reasons: Map<string, number>;
 }
 
@@ -24,25 +28,32 @@ export function buildBaseline(verdicts: readonly TraceVerdict[], untilMs: number
   for (const verdict of flagOn) {
     if (!verdict.failed) continue;
     for (const origin of verdict.origins) {
-      const key = `${verdict.route}\u0000${origin.name}`;
-      const point = failingPoints.get(key) ?? { route: verdict.route, span: origin.name, reasons: new Map() };
+      const key = `${verdict.route}\u0000${dependencyKey(origin.name, origin.target)}`;
+      const point: Point = failingPoints.get(key) ?? {
+        route: verdict.route,
+        span: origin.label ?? origin.name,
+        name: origin.name,
+        ...(origin.target === undefined ? {} : { target: origin.target }),
+        reasons: new Map(),
+      };
       point.reasons.set(origin.detail, (point.reasons.get(origin.detail) ?? 0) + 1);
       failingPoints.set(key, point);
     }
   }
 
-  const measure = (group: readonly TraceVerdict[], route: string, span: string) => {
+  const measure = (group: readonly TraceVerdict[], route: string, name: string, target: string | undefined) => {
+    const same = (p: { name: string; target?: string }) => p.name === name && p.target === target;
     const onRoute = group.filter((v) => v.route === route);
-    const through = onRoute.filter((v) => (v.points ?? []).some((p) => p.name === span));
-    const durations = through.flatMap((v) => (v.points ?? []).filter((p) => p.name === span).map((p) => p.durationMs));
-    const failures = through.filter((v) => v.failed && v.origins.some((o) => o.name === span)).length;
+    const through = onRoute.filter((v) => (v.points ?? []).some(same));
+    const durations = through.flatMap((v) => (v.points ?? []).filter(same).map((p) => p.durationMs));
+    const failures = through.filter((v) => v.failed && v.origins.some(same)).length;
     return { onRoute, through, stats: { requests: through.length, failures, p95Ms: percentile95(durations) } };
   };
 
   const rows: BaselineRow[] = [];
   for (const point of failingPoints.values()) {
-    const on = measure(flagOn, point.route, point.span);
-    const off = measure(stable, point.route, point.span);
+    const on = measure(flagOn, point.route, point.name, point.target);
+    const off = measure(stable, point.route, point.name, point.target);
     const spanExistsInStable = off.through.length > 0;
     const why = [...point.reasons.entries()].sort((a, b) => b[1] - a[1] || compare(a[0], b[0]))[0]?.[0] ?? '';
     rows.push({

@@ -10,7 +10,7 @@ export const config = (): GuardConfig => defaultConfig(FLAG, STABLE);
 
 const hex = (n: number, width: number): string => n.toString(16).padStart(width, '0');
 
-export type FaultAt = 'coupon' | 'shop-query' | 'price-query' | 'tax' | 'price';
+export type FaultAt = 'coupon' | 'shop-query' | 'price-query' | 'tax' | 'tax-call' | 'rules' | 'price';
 
 export interface Fault {
   at: FaultAt;
@@ -23,6 +23,10 @@ export const faults = {
   dbRefused: (at: 'shop-query' | 'price-query'): Fault => ({ at, type: 'ECONNREFUSED', message: 'connect ECONNREFUSED 172.18.0.5:5432' }),
   sqlSyntax: { at: 'price-query', type: '42601', message: 'syntax error at or near "FROM"' } as Fault,
   tax: { at: 'tax', type: 'Error', message: 'Tax table is not loaded' } as Fault,
+  /** The shared tax service, called by both versions. */
+  taxDown: { at: 'tax-call', type: 'ECONNREFUSED', message: 'connect ECONNREFUSED 172.18.0.7:3000' } as Fault,
+  /** The rules service, called only by the new checkout. */
+  rulesDown: { at: 'rules', type: 'ECONNREFUSED', message: 'connect ECONNREFUSED 172.18.0.8:3000' } as Fault,
   budget: { at: 'price', type: 'TimeoutError', message: 'price budget of 800 ms exceeded (timeout)' } as Fault,
 };
 
@@ -86,17 +90,27 @@ export function checkoutTrace(o: CheckoutOptions): FlatSpan[] {
   const handler = make(2, 1, 'request handler - /checkout', 'internal', 1, dur - 2, { 'express.type': 'request_handler', 'http.route': '/checkout' });
   const tax = make(3, 2, 'tax.lookup', 'internal', 2, 2);
   const shopQuery = make(4, 2, 'pg.query:SELECT shop', 'client', 4, 6, pg('SELECT * FROM shops WHERE id = $1'));
+  const http = (host: string): Record<string, AttrValue> => ({
+    'http.request.method': 'GET',
+    'server.address': host,
+    'server.port': 3000,
+    'url.full': `http://${host}:3000/${host}`,
+  });
+  const taxCall = make(8, 2, 'GET', 'client', 3, 3, http('tax'));
   const spans: Record<FaultAt, FlatSpan | undefined> = {
     tax,
+    'tax-call': taxCall,
+    rules: undefined,
     'shop-query': shopQuery,
     price: undefined,
     coupon: undefined,
     'price-query': undefined,
   };
-  const all = [root, handler, tax, shopQuery];
+  const all = [root, handler, tax, taxCall, shopQuery];
   const parents = new Map<string, string | undefined>([
     [handler.spanId, root.spanId],
     [tax.spanId, handler.spanId],
+    [taxCall.spanId, handler.spanId],
     [shopQuery.spanId, handler.spanId],
   ]);
 
@@ -104,6 +118,10 @@ export function checkoutTrace(o: CheckoutOptions): FlatSpan[] {
     const price = make(5, 2, 'checkout_v2.price', 'internal', 12, Math.max(dur / 2, 10), { 'alibi.flagged_path': FLAG });
     const coupon = make(6, 5, 'checkout_v2.apply_coupon', 'internal', 13, 3);
     const priceQuery = make(7, 5, 'pg.query:SELECT price', 'client', 17, 5, pg('SELECT price FROM prices WHERE sku = $1'));
+    const rules = make(9, 5, 'GET', 'client', 18, 4, http('rules'));
+    spans.rules = rules;
+    all.push(rules);
+    parents.set(rules.spanId, price.spanId);
     spans.price = price;
     spans.coupon = coupon;
     spans['price-query'] = priceQuery;

@@ -12,6 +12,7 @@ import type {
   TraceVerdict,
 } from './types.js';
 import { emptyRates, makeRates } from './stats.js';
+import { dependencyKey } from './target.js';
 
 /** Floating point slack so a rate exactly on the limit passes. */
 const EPSILON = 1e-9;
@@ -59,11 +60,13 @@ interface GuardMemory {
   /** Both arms inside the arm comparison's trailing window. */
   armFlagOn: Sample[];
   armStable: Sample[];
-  /** Names of spans the stable version has run. */
+  /** Identities (name and target) of spans the stable version has run. */
   stableSpans: string[];
   /** Requests through each dependency span while armed, and how many failed there, by arm. */
   dependencySpans: Record<string, { flagOn: { through: number; failed: number }; stable: { through: number; failed: number } }>;
-  /** Flag-on requests lost to an unavailable dependency on the flagged path, by span name. */
+  /** Notices already said, as `kind` and span identity, so each is said once. */
+  noticed: string[];
+  /** Flag-on requests lost to an unavailable dependency on the flagged path, by span identity. */
   flaggedDependencyFailures: Record<string, number>;
   flagOnDurations: number[];
   stableDurations: number[];
@@ -105,6 +108,7 @@ export class Guard {
       armStable: [],
       stableSpans: [],
       dependencySpans: {},
+      noticed: [],
       flaggedDependencyFailures: {},
       flagOnDurations: [],
       stableDurations: [],
@@ -158,7 +162,8 @@ export class Guard {
       } else {
         this.m.armStable.push(sample);
         for (const point of verdict.points ?? []) {
-          if (!this.m.stableSpans.includes(point.name)) this.m.stableSpans.push(point.name);
+          const key = dependencyKey(point.name, point.target);
+          if (!this.m.stableSpans.includes(key)) this.m.stableSpans.push(key);
         }
       }
       if (!verdict.flagOn && (s.phase === 'armed' || s.phase === 'switching-off')) {
@@ -286,12 +291,16 @@ export class Guard {
   private checkNotice(verdict: TraceVerdict, nowMs: number, events: GuardEvent[]): void {
     if (!verdict.evaluation || !verdict.flagOn || !verdict.failed || verdict.failureClass !== 'dependency') return;
     const s = this.s;
-    const names = new Set(verdict.origins.filter((o) => o.class === 'dependency' && o.onFlaggedPath).map((o) => o.name));
-    for (const span of names) {
-      const failures = (this.m.flaggedDependencyFailures[span] ?? 0) + 1;
-      this.m.flaggedDependencyFailures[span] = failures;
-      const known = (s.notices ?? []).some((notice) => notice.span === span && notice.kind === 'flagged-path-only');
-      if (failures < NOTICE_AFTER || known || this.m.stableSpans.includes(span)) continue;
+    const origins = new Map<string, string>();
+    for (const o of verdict.origins) {
+      if (o.class === 'dependency' && o.onFlaggedPath) origins.set(dependencyKey(o.name, o.target), o.label ?? o.name);
+    }
+    for (const [key, span] of origins) {
+      const failures = (this.m.flaggedDependencyFailures[key] ?? 0) + 1;
+      this.m.flaggedDependencyFailures[key] = failures;
+      const said = `flagged-path-only ${key}`;
+      if (failures < NOTICE_AFTER || this.m.noticed.includes(said) || this.m.stableSpans.includes(key)) continue;
+      this.m.noticed.push(said);
       const notice: Notice = {
         kind: 'flagged-path-only',
         atMs: nowMs,
@@ -312,22 +321,27 @@ export class Guard {
     const s = this.s;
     if (s.phase !== 'armed' || !verdict.evaluation) return;
     const rule = s.config.noticeRule ?? DEFAULT_NOTICE_RULE;
-    const names = new Set((verdict.points ?? []).filter((p) => p.dependency).map((p) => p.name));
-    for (const span of names) {
-      const entry = (this.m.dependencySpans[span] ??= {
+    const names = new Map<string, string>();
+    for (const p of verdict.points ?? []) {
+      if (p.dependency) names.set(dependencyKey(p.name, p.target), p.label ?? p.name);
+    }
+    for (const [key, span] of names) {
+      const entry = (this.m.dependencySpans[key] ??= {
         flagOn: { through: 0, failed: 0 },
         stable: { through: 0, failed: 0 },
       });
       const arm = verdict.flagOn ? entry.flagOn : entry.stable;
       arm.through += 1;
-      if ((verdict.points ?? []).some((p) => p.name === span && p.error)) arm.failed += 1;
-      const known = (s.notices ?? []).some((notice) => notice.span === span && notice.kind === 'dependency-uneven');
+      if ((verdict.points ?? []).some((p) => dependencyKey(p.name, p.target) === key && p.error)) arm.failed += 1;
+      const said = `dependency-uneven ${key}`;
+      const known = this.m.noticed.includes(said);
       const { flagOn, stable } = entry;
       if (known || flagOn.through < rule.minRequestsPerArm || stable.through < rule.minRequestsPerArm) continue;
       const onRate = flagOn.failed / flagOn.through;
       const stableRate = stable.failed / stable.through;
       if (onRate - stableRate < rule.ratePoints / 100 - EPSILON) continue;
       const pct = (rate: number) => `${(rate * 100).toFixed(1)}%`;
+      this.m.noticed.push(said);
       const notice: Notice = {
         kind: 'dependency-uneven',
         atMs: nowMs,

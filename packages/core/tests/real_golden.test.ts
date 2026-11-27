@@ -139,3 +139,19 @@ describe.skipIf(!present)('assembling real traces from separate batches', () => 
     }
   });
 });
+
+describe.skipIf(!existsSync(join(dir, 'tax-down.json')) || !existsSync(join(dir, 'rules-down.json')))('dependencies behind the same span name', () => {
+  it.each([
+    ['tax-down.json', 'tax:3000'],
+    ['rules-down.json', 'rules:3000'],
+  ])('%s: the failing GET span is told apart by its target', (name, target) => {
+    const bad = failing(judgeAll([load(name)]));
+    expect(bad.length).toBeGreaterThan(0);
+    for (const v of bad) {
+      const origin = v.origins.find((o) => o.name === 'GET');
+      expect(origin).toMatchObject({ target, label: `GET ${target}`, class: 'dependency' });
+      expect(v.reason).toContain(`Failed in GET ${target}, a dependency call (server.address=`);
+    }
+  });
+});
+
