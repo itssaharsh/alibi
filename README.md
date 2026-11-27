@@ -43,7 +43,7 @@ One run is an anecdote, so each scenario was run five more times, each from a fr
 
 | Scenario, 5 runs each | Alibi | Plain error-rate rule | Arm comparison, 10-point margin | Arm comparison, 20-point margin |
 |---|---|---|---|---|
-| The database outage | flag stayed on in 5 of 5: 0 counted, 82 to 99 failures with the flag on, every one a dependency failure | would have switched the healthy feature off in 5 of 5 | would have switched it off in 3 of 5 | would have held in 5 of 5 (the widest gap between the arms was 15.5 points) |
+| The database outage | flag stayed on in 5 of 5: 0 counted, 82 to 99 failures with the flag on, every one a dependency failure | would have switched the healthy feature off in 5 of 5 | would have switched it off in 3 of 5 | would have held in 5 of 5 (the widest gap between the arms was 17.8 points) |
 | The coupon bug | switched off in 5 of 5, between +2:22 and +2:43; recovered and labelled "probably the feature" in 5 of 5 | 5 of 5, 33 to 47 seconds sooner than Alibi | 5 of 5, sooner than Alibi | 5 of 5 |
 | The slow host | switched off in 5 of 5; never recovered; "probably not the feature" in 5 of 5 | 5 of 5, 9 to 13 seconds sooner | 5 of 5, sooner | 5 of 5 |
 
