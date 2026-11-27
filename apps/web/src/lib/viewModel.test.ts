@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createReplayer, replayRun } from '@alibi/core';
 import { buildRun } from '../../../../packages/core/tests/fixtures';
 import { metaOf, snapshotOf } from './snapshots';
-import { alibiLine, simplerRules, simplerRulesShort } from './format';
+import { alibiLine, simplerRules, simplerRulesShort, whyVerdict } from './format';
 import { applySnapshot, boardFrom, outcomeOf, waterfallOf } from './viewModel';
 import { FLAGGED_PATH_ATTRIBUTE } from '@alibi/core';
 
@@ -145,5 +145,51 @@ describe.skipIf(!existsSync(realOutage))('against the recorded outage run', () =
     expect(simplerRulesShort(board, true)).toBe('Both simpler rules would have switched it off: at +01:16 and +01:22.');
     expect(two.alibi).toMatch(/^Alibi counted 0 of 97, so the flag stays on\./);
     expect(two.sooner).toBeUndefined();
+  });
+});
+
+describe.skipIf(!existsSync(realOutage) || !existsSync(realRun))('"Why this verdict" on the recorded runs', () => {
+  const realSlow = fileURLToPath(new URL('../../../../runs/slow-host.jsonl', import.meta.url));
+  const finishedBoard = (file: string) => {
+    const l = parseRun(readFileSync(file, 'utf8'));
+    const rp = createReplayer(l);
+    const ev = rp.step(Infinity);
+    return boardFrom(metaOf(rp.header), snapshotOf(rp, ev, true, rp.endsAtMs - rp.header.startedAtMs));
+  };
+  const words = (file: string) => whyVerdict(finishedBoard(file), true).map((l) => `${l.lead}${l.text}`);
+
+  it('outage: none counted, 97 excluded with the reason, the stable version failed at the same point, nothing to check', () => {
+    expect(words(realOutage)).toEqual([
+      "None in the feature's own code",
+      '97 failed in a dependency: pg.connect, Connection terminated unexpectedly',
+      'The stable version failed at pg.connect too: 82 of its requests',
+      'The flag was not switched off, so there was nothing to check',
+    ]);
+  });
+
+  it('coupon bug: 16 counted, back at the stable level', () => {
+    const w = words(realRun);
+    expect(w[0]).toBe("16 failures in the feature's own code");
+    expect(w[1]).toBe("None failed in a dependency or the server");
+    expect(w[3]).toBe('Back at the stable level at +03:30: probably the feature');
+  });
+
+  it('slow host: 16 counted, never back at the stable level', () => {
+    if (!existsSync(realSlow)) return;
+    const w = words(realSlow);
+    expect(w[0]).toBe("16 failures in the feature's own code");
+    expect(w[3]).toBe('Still above the stable level after 5 minutes: probably not the feature');
+  });
+
+  it('the comparison exists before any switch-off, from the verdicts so far', () => {
+    const l = parseRun(readFileSync(realOutage, 'utf8'));
+    const rp = createReplayer(l);
+    const base = rp.header.startedAtMs;
+    const ev = rp.step(base + 100_000);
+    const board = boardFrom(metaOf(rp.header), snapshotOf(rp, ev, true, 100_000));
+    expect(board.record).toBeUndefined();
+    expect(board.baseline.length).toBeGreaterThan(0);
+    expect(whyVerdict(board, false)[2]!.lead).toBe('The stable version failed');
+    expect(whyVerdict(board, false)[3]!.lead).toBe('Not needed yet');
   });
 });

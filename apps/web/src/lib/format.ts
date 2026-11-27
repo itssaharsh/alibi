@@ -93,3 +93,90 @@ export function armMarginLine(config: GuardConfig): string {
   const a = config.armRule ?? DEFAULT_ARM_RULE;
   return `The arm comparison acts at a ${a.errorRatePoints}-point margin: flag-on errors must exceed stable by that many points over ${a.windowMs / 1000} seconds, with at least ${a.minRequestsPerArm} requests in each arm.`;
 }
+
+export type WhyTarget = { kind: 'tab'; tab: 'counted' | 'excluded' } | { kind: 'compare' } | { kind: 'watch' } | { kind: 'rule' };
+
+export interface WhyLine {
+  n: 1 | 2 | 3 | 4;
+  /** The part to set in bold: a number or a short phrase at the start of the line. */
+  lead: string;
+  text: string;
+  target: WhyTarget;
+}
+
+const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many);
+
+/** The most common failing point and reason among excluded requests, for example `pg.connect, Connection terminated unexpectedly`. */
+export function topExcludedReason(board: Board): string | undefined {
+  const rest = board.tags.filter((t) => !t.counted);
+  const counts = new Map<string, number>();
+  for (const t of rest) {
+    const o = t.origins[0];
+    if (!o) continue;
+    // The engine's short reason can begin with span attributes (`db.system.name=postgresql`); the readable part follows them.
+    const detail = o.detail.replace(/^(?:\S+=\S+\s+)+/, '');
+    const key = detail ? `${o.name}, ${detail}` : o.name;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]?.[0];
+}
+
+/**
+ * "Why this verdict": the author's four-part rule, each line from the engine's numbers for this moment of this run.
+ * Nothing is computed here beyond picking the biggest group and writing the sentence.
+ */
+export function whyVerdict(board: Board, finished: boolean): WhyLine[] {
+  const { state } = board;
+  const lines: WhyLine[] = [];
+
+  const counted = state.counted;
+  lines.push({
+    n: 1,
+    lead: counted === 0 ? 'None' : String(counted),
+    text: counted === 0 ? " in the feature's own code" : ` ${plural(counted, 'failure', 'failures')} in the feature's own code`,
+    target: { kind: 'tab', tab: 'counted' },
+  });
+
+  const n = state.notCounted;
+  const excluded = n.dependency + n.server + n.mixed;
+  if (excluded === 0) {
+    lines.push({ n: 2, lead: 'None', text: ' failed in a dependency or the server', target: { kind: 'tab', tab: 'excluded' } });
+  } else {
+    const where = n.dependency >= n.server && n.dependency >= n.mixed ? 'in a dependency' : n.server >= n.mixed ? 'in the server' : 'in a dependency and the server';
+    const reason = topExcludedReason(board);
+    lines.push({ n: 2, lead: String(excluded), text: ` failed ${where}${reason ? `: ${reason}` : ''}`, target: { kind: 'tab', tab: 'excluded' } });
+  }
+
+  const rows = board.record?.baseline ?? board.baseline;
+  const top = rows[0];
+  if (top) {
+    const s = top.stable;
+    const text = !top.spanExistsInStable
+      ? `The stable version does not run ${top.span}; on ${top.route} it failed ${s.failures} of ${s.requests} requests`
+      : s.failures > 0
+        ? `The stable version failed at ${top.span} too: ${s.failures} of its requests`
+        : `The stable version did not fail at ${top.span}: 0 of ${s.requests} requests`;
+    const lead = !top.spanExistsInStable ? 'The stable version does not run' : s.failures > 0 ? 'The stable version failed' : 'The stable version did not fail';
+    lines.push({ n: 3, lead, text: text.slice(lead.length), target: { kind: 'compare' } });
+  } else {
+    lines.push({ n: 3, lead: 'The stable version', text: ' is compared at each failing point once something fails', target: { kind: 'compare' } });
+  }
+
+  let four: WhyLine;
+  if (state.label) {
+    const minutes = state.config.watchMs / 60000;
+    four =
+      state.recoveredAtMs !== undefined
+        ? { n: 4, lead: 'Back at the stable level', text: ` at ${rel(board, state.recoveredAtMs)}: ${state.label}`, target: { kind: 'watch' } }
+        : { n: 4, lead: 'Still above the stable level', text: ` after ${minutes} minutes: ${state.label}`, target: { kind: 'watch' } };
+  } else if (state.phase === 'watching' || state.phase === 'switching-off') {
+    const left = state.watchEndsAtMs === undefined ? undefined : Math.max(0, Math.ceil((state.watchEndsAtMs - (board.meta.startedAtMs + board.nowMs)) / 1000));
+    four = { n: 4, lead: 'Watching', text: left === undefined ? ' for the stable level to come back' : ` for the stable level to come back: ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} left`, target: { kind: 'watch' } };
+  } else {
+    four = finished
+      ? { n: 4, lead: 'The flag was not switched off', text: ', so there was nothing to check', target: { kind: 'rule' } }
+      : { n: 4, lead: 'Not needed yet', text: ': the flag has not been switched off', target: { kind: 'rule' } };
+  }
+  lines.push(four);
+  return lines;
+}

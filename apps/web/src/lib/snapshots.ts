@@ -1,4 +1,4 @@
-import type { FlagsmithExperimentSummary, GuardEvent, Replayer, RunHeader, RunLine } from '@alibi/core';
+import { buildBaseline, type BaselineRow, type FlagsmithExperimentSummary, type GuardEvent, type Replayer, type RunHeader, type RunLine } from '@alibi/core';
 import { deltaOf, type RecordedResults, type RunMeta, type Snapshot } from './viewModel';
 
 export function metaOf(header: RunHeader): RunMeta {
@@ -27,16 +27,21 @@ export function snapshotOf(
   reset: boolean,
   nowMs: number,
   results?: RecordedResults,
+  /** The baseline, when it is not to be worked out again for this snapshot. */
+  baseline?: BaselineRow[],
 ): Snapshot {
   const result = replayer.result();
   const base = replayer.header.startedAtMs;
-  const { tags, moments } = deltaOf(events, base);
+  const { tags, stableTags, moments } = deltaOf(events, base);
   return {
     reset,
     nowMs,
     endMs: replayer.endsAtMs - base,
     state: result.state,
     newTags: tags,
+    newStableTags: stableTags,
+    // The engine's own baseline over the requests so far, so the comparison exists at every moment of every run.
+    baseline: baseline ?? buildBaseline(result.verdicts),
     newMoments: moments,
     timeline: result.timeline.filter((entry) => !entry.failure).map((entry) => ({ atMs: entry.atMs - base, text: entry.text })),
     // The page lists failing requests from the tags it draws, so the record's own copy of every trace is left out here.

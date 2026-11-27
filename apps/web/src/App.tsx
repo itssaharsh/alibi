@@ -1,15 +1,23 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FlatSpan } from '@alibi/core';
 import { readParams } from './lib/params';
 import { useBoard } from './lib/useBoard';
 import type { Tag } from './lib/viewModel';
-import { lowerFirst } from './lib/format';
+import { lowerFirst, type WhyTarget } from './lib/format';
 import { REPO_URL } from './lib/copy';
 import { Board } from './components/Board';
 import { WordsUsed } from './components/Gloss';
 import { Demo, DemoLink } from './components/Demo';
-import { loadVideo, type Video } from './lib/video';
-import { AuthorRule, Footer, FailingAndTrace, FlagsmithNumbers, PlugIn, Record, VerdictCard, WatchBand } from './components/Sections';
+import { loadFigures, loadVideo, type Figures, type Video } from './lib/video';
+import { AuthorRule, Comparison, Footer, FailingAndTrace, FlagsmithNumbers, PlugIn, Record, VerdictCard, WatchBand, WhyVerdict, type FailTab } from './components/Sections';
+
+const isLiveSource = (source: string): boolean => source === 'live';
+const JAEGER_URL: string | undefined = (import.meta.env.VITE_JAEGER_URL as string | undefined) || undefined;
+
+function scrollToId(id: string): void {
+  const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  document.getElementById(id)?.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+}
 
 export interface Selected {
   id?: string;
@@ -23,21 +31,28 @@ export function App() {
   const ctl = useBoard(params);
   const { board, index, mode } = ctl;
   const [video, setVideo] = useState<Video>();
+  const [figures, setFigures] = useState<Figures>();
   useEffect(() => {
     if (!params.record) void loadVideo().then(setVideo);
+    void loadFigures().then(setFigures);
   }, [params.record]);
   // The open request is derived from the board in front of the person, never stored across sources: a pick made by
   // hand wins; otherwise the first counted failure, or the newest failure while none counted; a recorded run's
   // first screen opens on the failure its summary carries. Spans are kept per source and run.
+  const isLive = ctl.source === 'live';
   const sourceKey = `${ctl.source}|${board?.meta.name ?? ''}`;
-  const [picked, setPicked] = useState<{ key: string; id: string }>();
+  // A deep link (`?trace=`) is a pick made before the board exists; it applies to whichever board shows that request.
+  const [picked, setPicked] = useState<{ key: string; id: string } | undefined>(params.trace ? { key: '*', id: params.trace } : undefined);
   const [spans, setSpans] = useState<Record<string, FlatSpan[]>>({});
+  const [tabChoice, setTabChoice] = useState<FailTab>();
   const tags = board?.tags ?? [];
-  const pickedId = picked && picked.key === sourceKey && tags.some((t) => t.id === picked.id) ? picked.id : undefined;
+  const stableTags = board?.stableTags ?? [];
+  const everyTag = useMemo(() => [...tags, ...stableTags], [tags, stableTags]);
+  const pickedId = picked && (picked.key === '*' || picked.key === sourceKey) && everyTag.some((t) => t.id === picked.id) ? picked.id : undefined;
   const featuredId = ctl.source === 'live' ? undefined : ctl.featured?.id;
   const defaultTag =
     tags.find((t) => t.id === featuredId) ?? tags.find((t) => t.counted) ?? (ctl.source === 'live' ? tags[tags.length - 1] : tags[0]);
-  const openTag = tags.find((t) => t.id === pickedId) ?? defaultTag;
+  const openTag = everyTag.find((t) => t.id === pickedId) ?? defaultTag;
   const spanKey = openTag ? `${sourceKey}|${openTag.id}` : '';
   const known = ctl.source !== 'live' && ctl.featured && openTag && ctl.featured.id === openTag.id ? ctl.featured.spans : spans[spanKey];
   const selected: Selected = {
@@ -58,6 +73,50 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spanKey, known === undefined]);
 
+  const tabOf = (t: Tag | undefined): FailTab => (!t ? 'counted' : stableTags.some((s) => s.id === t.id) ? 'stable' : t.counted ? 'counted' : 'excluded');
+  const defaultTab: FailTab = tags.some((t) => t.counted) ? 'counted' : tags.length > 0 ? 'excluded' : 'counted';
+  const tab = tabChoice ?? (pickedId ? tabOf(openTag) : defaultTab);
+
+  // The page address of one request, for copying and for every list row.
+  const hrefFor = (id: string): string => {
+    const u = new URL(location.href);
+    for (const k of ['t', 'state', 'focus', 'autoplay', 'speed']) u.searchParams.delete(k);
+    if (ctl.source !== 'live' && board) u.searchParams.set('run', board.meta.name);
+    u.searchParams.set('trace', id);
+    return u.toString();
+  };
+  const links = { href: hrefFor, ...(isLiveSource(ctl.source) && JAEGER_URL ? { jaeger: (id: string) => `${JAEGER_URL.replace(/\/$/, '')}/trace/${id}` } : {}) };
+
+  const pick = (tag: Tag): void => {
+    setPicked({ key: sourceKey, id: tag.id });
+    setTabChoice(tabOf(tag));
+  };
+  const go = (target: WhyTarget): void => {
+    if (target.kind === 'tab') {
+      const list = target.tab === 'counted' ? tags.filter((t) => t.counted) : tags.filter((t) => !t.counted);
+      const first = list.sort((a, b) => a.atMs - b.atMs)[0];
+      setTabChoice(target.tab);
+      if (first) setPicked({ key: sourceKey, id: first.id });
+      scrollToId('focus-trace');
+    } else scrollToId(target.kind === 'compare' ? 'focus-compare' : target.kind === 'watch' ? 'focus-watch' : 'focus-rule');
+  };
+  const whyHref = (target: WhyTarget): string => {
+    if (target.kind === 'tab') {
+      const first = tags.filter((t) => (target.tab === 'counted' ? t.counted : !t.counted)).sort((a, b) => a.atMs - b.atMs)[0];
+      return first ? hrefFor(first.id) : '#focus-trace';
+    }
+    return target.kind === 'compare' ? '#focus-compare' : target.kind === 'watch' ? '#focus-watch' : '#focus-rule';
+  };
+
+  // A deep link opens its request and brings the trace into view once, when the board first has it.
+  const deepLinked = useRef(false);
+  useEffect(() => {
+    if (deepLinked.current || !params.trace || !pickedId) return;
+    deepLinked.current = true;
+    const id = window.setTimeout(() => scrollToId('focus-trace'), 700);
+    return () => window.clearTimeout(id);
+  }, [params.trace, pickedId]);
+
   useEffect(() => {
     if (!params.focus || !board) return;
     const id = window.setTimeout(() => document.getElementById(`focus-${params.focus}`)?.scrollIntoView({ block: 'start' }), 600);
@@ -65,13 +124,10 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [Boolean(board), params.focus]);
 
-  const pick = (tag: Tag): void => setPicked({ key: sourceKey, id: tag.id });
-
   const skeleton = params.state === 'loading';
   const reduced = params.state === 'reduced';
   const entry = index?.runs.find((r) => r.name === board?.meta.name);
   const title = entry?.title ?? board?.meta.title ?? 'the database outage';
-  const isLive = ctl.source === 'live';
   const playing = mode === 'playing';
   const caption =
     ctl.source === 'live'
@@ -113,6 +169,7 @@ export function App() {
               <p className="sub">Alibi switches a feature flag off only when the feature's own code is failing, and shows you why.</p>
               <p className="for-line">For teams who ship features behind Flagsmith flags.</p>
               {board ? <VerdictCard board={board} ctl={ctl} skeleton={skeleton} /> : <div className="verdict sk" style={{ height: 120 }} aria-busy="true" />}
+              {board ? <WhyVerdict board={board} finished={board.nowMs >= board.endMs - 1 && ctl.mode !== 'playing'} onGo={go} hrefFor={whyHref} /> : null}
               {isLive ? null : (
               <button type="button" className="btn" aria-disabled={mode === 'loading'} onClick={() => (playing ? ctl.pause() : ctl.play())}>
                 <span aria-hidden="true">{playing ? '❚❚' : '▶'}</span> {playing ? 'Pause replay' : `Replay ${lowerFirst(title)}`}
@@ -133,7 +190,11 @@ export function App() {
                   <DemoLink video={video} />
                 </div>
               ) : null}
-              {board ? <WatchBand board={board} /> : null}
+              {board ? (
+                <div id="focus-watch">
+                  <WatchBand board={board} />
+                </div>
+              ) : null}
               {board && !board.record && (board.flagsmith || board.flagsmithNote) && !params.record ? (
                 <div className="fsc-hero">
                   <FlagsmithNumbers board={board} small />
@@ -155,8 +216,15 @@ export function App() {
           {mode === 'failed' ? <p className="card muted">This run did not load. Pick another run above, or reload the page.</p> : null}
           {board ? (
             <>
-              <div id="focus-trace"><FailingAndTrace board={board} selected={selected} onPick={pick} /></div>
-              <div id="focus-record"><Record board={board} /></div>
+              <div id="focus-trace">
+                <FailingAndTrace board={board} selected={selected} onPick={pick} tab={tab} setTab={setTabChoice} links={links} />
+              </div>
+              <div id="focus-compare">
+                <Comparison board={board} onPick={pick} links={links} />
+              </div>
+              <div id="focus-record">
+                <Record board={board} figures={figures} />
+              </div>
             </>
           ) : null}
           <div id="focus-rule"><AuthorRule {...(board ? { board } : {})} /></div>

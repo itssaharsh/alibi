@@ -1,5 +1,5 @@
 import type { FlagsmithExperimentSummary, FlatSpan, GuardEvent, GuardState, InvestigationRecord, Rates, TraceVerdict } from '@alibi/core';
-import { momentOf, tagOf, type Board, type Moment, type Tag, type TimelineLine } from './viewModel';
+import { anyTagOf, momentOf, tagOf, type Board, type Moment, type Tag, type TimelineLine } from './viewModel';
 
 /**
  * The live guard, behind one small adapter. The payloads are those of packages/guard (http.ts, service.ts):
@@ -43,6 +43,7 @@ export function connectLive(url: string, onBoard: (board: Board) => void, onDown
   let state: GuardState | undefined;
   let base = 0;
   let tags: Tag[] = [];
+  let stableTags: Tag[] = [];
   let moments: Moment[] = [];
   let timeline: TimelineLine[] = [];
   let record: InvestigationRecord | undefined;
@@ -75,6 +76,9 @@ export function connectLive(url: string, onBoard: (board: Board) => void, onDown
       endMs: now,
       state,
       tags,
+      stableTags,
+      // The guard does not send the baseline; the record carries it after a switch-off.
+      baseline: [],
       moments,
       timeline,
       ...(record ? { record } : {}),
@@ -123,10 +127,9 @@ export function connectLive(url: string, onBoard: (board: Board) => void, onDown
       state = p.state;
       base = p.run.startedAtMs;
       record = undefined;
-      tags = (p.recent ?? [])
-        .map((v) => tagOf(v, base))
-        .filter((t): t is Tag => t !== undefined)
-        .sort((a, b) => a.atMs - b.atMs);
+      const recent = (p.recent ?? []).map((v) => ({ v, t: anyTagOf(v, base) })).filter((x): x is { v: TraceVerdict; t: Tag } => x.t !== undefined);
+      tags = recent.filter((x) => x.v.flagOn).map((x) => x.t).sort((a, b) => a.atMs - b.atMs);
+      stableTags = recent.filter((x) => !x.v.flagOn).map((x) => x.t).sort((a, b) => a.atMs - b.atMs);
       moments = momentsFromState(state, p.flagsmith?.switchOff?.detail);
       timeline = timelineOf(p);
       const last = p.lastSpanAtMs ?? state.lastSpanAtMs ?? base;
@@ -168,6 +171,8 @@ export function connectLive(url: string, onBoard: (board: Board) => void, onDown
     }
     noteServerTime(msg.atMs);
     if (msg.type === 'verdict') {
+      const stableTag = msg.verdict.flagOn ? undefined : anyTagOf(msg.verdict, base);
+      if (stableTag) stableTags = [...stableTags, stableTag];
       const tag = tagOf(msg.verdict, base);
       if (tag) {
         tags = [...tags, tag];

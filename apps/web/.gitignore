@@ -5,3 +5,4 @@ public/probe.json
 test-results/
 playwright-report/
 public/video.json
+public/figures.json

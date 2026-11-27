@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { createReplayer, parseRun, type FlatSpan, type Replayer, type RunLine } from '@alibi/core';
+import { buildBaseline, createReplayer, parseRun, type BaselineRow, type FlatSpan, type Replayer, type RunLine } from '@alibi/core';
 import { metaOf, recordedResults, snapshotOf } from '../lib/snapshots';
 import type { RunMeta, Snapshot } from '../lib/viewModel';
 
@@ -18,6 +18,7 @@ let lines: RunLine[] = [];
 let replayer: Replayer | undefined;
 let at = 0;
 let results: ReturnType<typeof recordedResults>;
+let lastBaseline: { at: number; rows: BaselineRow[] } | undefined;
 let spansByTrace: Map<string, FlatSpan[]> | undefined;
 
 const post = (message: WorkerOut): void => (self as unknown as Worker).postMessage(message);
@@ -36,6 +37,7 @@ self.onmessage = async (event: MessageEvent<WorkerIn>) => {
       if (msg.dropAnswers) lines = lines.filter((l) => !(l.kind === 'flagsmith' && l.what === 'switch-off'));
       spansByTrace = undefined;
       replayer = createReplayer(lines);
+      lastBaseline = undefined;
       results = recordedResults(lines);
       at = 0;
       post({ type: 'loaded', meta: metaOf(replayer.header), endMs: replayer.endsAtMs - replayer.header.startedAtMs, fetchMs: t1 - t0, parseMs: t2 - t1 });
@@ -48,7 +50,11 @@ self.onmessage = async (event: MessageEvent<WorkerIn>) => {
       }
       const events = replayer.step(base + msg.atMs);
       at = msg.atMs;
-      post({ type: 'snapshot', seq: msg.seq, snapshot: snapshotOf(replayer, events, reset, msg.atMs, results) });
+      // The baseline is worked out at most twice a second while playing, and always at a reset or at the end.
+      const now = performance.now();
+      const atEnd = msg.atMs >= replayer.endsAtMs - base - 1;
+      if (reset || atEnd || !lastBaseline || now - lastBaseline.at > 500) lastBaseline = { at: now, rows: buildBaseline(replayer.result().verdicts) };
+      post({ type: 'snapshot', seq: msg.seq, snapshot: snapshotOf(replayer, events, reset, msg.atMs, results, lastBaseline.rows) });
     } else if (msg.type === 'trace') {
       if (!spansByTrace) {
         spansByTrace = new Map();

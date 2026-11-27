@@ -26,3 +26,20 @@ export function minutes(seconds: number): string {
   const s = Math.round(seconds);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
+
+/** Real stills of Flagsmith's own experiment page, when the build found them in public/. */
+export interface Figures {
+  rollout?: string;
+  results?: string;
+}
+
+export async function loadFigures(): Promise<Figures | undefined> {
+  try {
+    const response = await fetch(url('figures.json'));
+    if (!response.ok) return undefined;
+    const json = (await response.json()) as Figures;
+    return json && (typeof json.rollout === 'string' || typeof json.results === 'string') ? json : undefined;
+  } catch {
+    return undefined;
+  }
+}

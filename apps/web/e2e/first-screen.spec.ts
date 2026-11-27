@@ -143,3 +143,95 @@ test('the arm comparison margin is stated once in plain words, from the run sett
   const card = page.getByRole('group', { name: 'Two simpler rules, same requests' }).first();
   await expect(card).toContainText('The arm comparison acts at a 10-point margin', { useInnerText: true });
 });
+
+type Summary = { snapshot: { newTags: { id: string; counted: boolean; atMs: number; cls: string }[]; newStableTags?: { id: string }[] } };
+
+test('"Why this verdict" is on the first screen, without scrolling, with the engine\'s numbers', async ({ page }) => {
+  await page.goto('./?run=outage');
+  const why = page.getByRole('region', { name: 'Why this verdict' });
+  await expect(why).toBeInViewport({ ratio: 1 });
+  await expect(why.getByRole('link')).toHaveCount(4);
+  await expect(why).toContainText("None in the feature's own code", { useInnerText: true });
+  await expect(why).toContainText('97 failed in a dependency: pg.connect, Connection terminated unexpectedly', { useInnerText: true });
+  await expect(why).toContainText('The stable version failed at pg.connect too: 82 of its requests', { useInnerText: true });
+  await expect(why).toContainText('The flag was not switched off, so there was nothing to check', { useInnerText: true });
+  await expect(page.locator('.stamp')).toBeInViewport({ ratio: 1 });
+  await expect(page.locator('.mini')).toBeInViewport({ ratio: 0.5 });
+});
+
+test('each line of "Why this verdict" lands on its evidence with the right request open', async ({ page, request }) => {
+  const s = (await (await request.get('./runs/coupon-bug.summary.json')).json()) as Summary;
+  const firstCounted = s.snapshot.newTags.filter((t) => t.counted).sort((a, b) => a.atMs - b.atMs)[0]!;
+  await page.goto('./?run=coupon-bug');
+  const why = page.getByRole('region', { name: 'Why this verdict' });
+  await why.getByRole('link').nth(0).click();
+  await expect(page.getByRole('tab', { name: /^Counted/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.sticky')).toContainText(firstCounted.id.slice(0, 8));
+  await expect(page.getByRole('heading', { name: 'Failing requests' })).toBeInViewport();
+  await why.getByRole('link').nth(2).click();
+  await expect(page.getByRole('region', { name: 'Compared with the stable version' })).toBeInViewport();
+  await why.getByRole('link').nth(3).click();
+  await expect(page.getByRole('region', { name: 'The watch after the switch-off' })).toBeInViewport();
+  await expect(why).toContainText('Back at the stable level at +03:30: probably the feature', { useInnerText: true });
+
+  await page.goto('./?run=outage');
+  await page.getByRole('region', { name: 'Why this verdict' }).getByRole('link').nth(1).click();
+  await expect(page.getByRole('tab', { name: /^Not counted/ })).toHaveAttribute('aria-selected', 'true');
+  const out = (await (await request.get('./runs/outage.summary.json')).json()) as Summary;
+  const firstExcluded = out.snapshot.newTags.filter((t) => !t.counted).sort((a, b) => a.atMs - b.atMs)[0]!;
+  await expect(page.locator('.sticky')).toContainText(firstExcluded.id.slice(0, 8));
+});
+
+test('a deep link opens that request and brings its trace into view', async ({ page, request }) => {
+  const s = (await (await request.get('./runs/coupon-bug.summary.json')).json()) as Summary;
+  const counted = s.snapshot.newTags.filter((t) => t.counted).sort((a, b) => a.atMs - b.atMs);
+  const target = counted[4]!;
+  await page.goto(`./?run=coupon-bug&trace=${target.id}`);
+  await expect(page.locator('.sticky')).toContainText(target.id.slice(0, 8));
+  await expect(page.locator('a.f-row.sel')).toContainText(target.id.slice(0, 8));
+  await expect(page.getByRole('heading', { name: 'Trace', exact: true })).toBeInViewport({ timeout: 10_000 });
+  await expect(page.locator('.sticky .reason')).toContainText('Failed in checkout_v2.apply_coupon');
+  // a stable request that failed opens too, on the stable list
+  const stable = s.snapshot.newStableTags?.[0];
+  if (stable) {
+    await page.goto(`./?run=coupon-bug&trace=${stable.id}`);
+    await expect(page.getByRole('tab', { name: /^Stable version, same period/ })).toHaveAttribute('aria-selected', 'true');
+  }
+  await page.getByRole('button', { name: 'Copy link' }).first().isVisible();
+});
+
+test('the failing requests are split into counted, not counted and the stable version', async ({ page }) => {
+  await page.goto('./?run=outage');
+  await expect(page.getByRole('tab', { name: /^Counted \(0\)/ })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /^Not counted \(97\)/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('a.f-row').first()).toContainText('dependency');
+  await page.getByRole('tab', { name: /^Stable version, same period/ }).click();
+  await expect(page.locator('a.f-row .chip').first()).toHaveText('stable');
+});
+
+test('Flagsmith stills show under the record only when the files exist', async ({ page }) => {
+  await page.route('**/figures.json', (route) => route.fulfill({ status: 404, body: 'no' }));
+  await page.goto('./?run=coupon-bug');
+  await expect(page.getByRole('region', { name: 'Investigation record' })).toBeVisible();
+  await expect(page.locator('.figures')).toHaveCount(0);
+  await page.unroute('**/figures.json');
+  await page.route('**/figures.json', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ rollout: 'flagsmith-rollout.png', results: 'flagsmith-results.png' }) }));
+  await page.reload();
+  await expect(page.getByText("Flagsmith's own experiment page after the switch-off: Current rollout 0%")).toBeAttached();
+  await expect(page.getByText("Flagsmith's results table for the same experiment")).toBeAttached();
+  await expect(page.locator('.figures img').first()).toHaveAttribute('loading', 'lazy');
+});
+
+test('five runs fit the "Try these" row without sideways scroll on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**/runs/index.json', async (route) => {
+    const res = await route.fetch();
+    const json = (await res.json()) as { runs: { name: string; title: string; planted: string; source: string; size: number }[]; default: string };
+    const extra = ['The rare bug', 'The cold cache'].map((title, i) => ({ ...json.runs[0]!, name: `extra-${i}`, title }));
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ...json, runs: [...json.runs, ...extra] }) });
+  });
+  await page.goto('./');
+  await expect(page.getByRole('button', { name: 'The cold cache' })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});

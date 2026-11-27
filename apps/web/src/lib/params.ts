@@ -14,6 +14,8 @@ export interface Params {
   speed: number | null;
   /** Scrolls a section into view on load: `trace`, `record`, `rule`, `plug`. For video capture. */
   focus: string | null;
+  /** Opens this request: `?run=coupon-bug&trace=<id>`, or `?trace=<id>` on a live board. */
+  trace: string | null;
 }
 
 /** Set at build time (`VITE_LIVE_SAME_ORIGIN=1`) by the compose stack, whose web server also forwards `/api/` to the guard. */
@@ -33,5 +35,6 @@ export function readParams(search: string): Params {
     live: q.get('live') ?? (SAME_ORIGIN_GUARD ? location.origin : null),
     speed: Number(q.get('speed')) > 0 ? Number(q.get('speed')) : null,
     focus: q.get('focus'),
+    trace: q.get('trace'),
   };
 }

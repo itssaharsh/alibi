@@ -9,7 +9,8 @@ COPY packages/core packages/core
 COPY runs runs
 COPY apps/web apps/web
 # The page opens as a live board against the guard the same web server forwards /api/ to.
-RUN cd apps/web && VITE_LIVE_SAME_ORIGIN=1 npm run build
+# The live board links each open request to Jaeger, which the stack publishes on this address.
+RUN cd apps/web && VITE_LIVE_SAME_ORIGIN=1 VITE_JAEGER_URL=http://127.0.0.1:16686 npm run build
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 # Server-sent events (/api/events) must not be buffered: buffering would hold every event until the stream ends.

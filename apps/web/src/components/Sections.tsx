@@ -5,7 +5,8 @@ import type { Board as BoardData, Tag } from '../lib/viewModel';
 import { outcomeOf, percent } from '../lib/viewModel';
 import type { Controller } from '../lib/useBoard';
 import { AUTHORS_RULE, COLLECTOR_CONFIG, REPO_URL, SPAN_ATTRIBUTES } from '../lib/copy';
-import { classWords, ms, pct, ratesLine, rel, relMs, sig, simplerRules, simplerRulesShort } from '../lib/format';
+import { classWords, ms, pct, ratesLine, rel, relMs, sig, simplerRules, simplerRulesShort, whyVerdict, type WhyTarget } from '../lib/format';
+import { videoUrl, type Figures } from '../lib/video';
 import { Gloss } from './Gloss';
 import { armMarginLine } from '../lib/format';
 import { Waterfall } from './Waterfall';
@@ -162,13 +163,27 @@ export function WatchBand({ board }: { board: BoardData }) {
   );
 }
 
-function Pager({ tags, selected, onPick }: { tags: Tag[]; selected: Selected; onPick: (t: Tag) => void }) {
+export type FailTab = 'counted' | 'excluded' | 'stable';
+
+interface TraceLinks {
+  href: (id: string) => string;
+  jaeger?: ((id: string) => string) | undefined;
+}
+
+function Pager({ tags, selected, onPick, links, chip }: { tags: Tag[]; selected: Selected; onPick: (t: Tag) => void; links: TraceLinks; chip: (t: Tag) => string }) {
   const [shown, setShown] = useState(12);
-  const sorted = [...tags].sort((a, b) => Number(b.counted) - Number(a.counted) || a.atMs - b.atMs);
   return (
     <div className="failing">
-      {sorted.slice(0, shown).map((t, i) => (
-        <button type="button" key={t.id} className={`f-row${selected.id === t.id ? ' sel' : ''}`} onClick={() => onPick(t)}>
+      {tags.slice(0, shown).map((t, i) => (
+        <a
+          key={t.id}
+          href={links.href(t.id)}
+          className={`f-row${selected.id === t.id ? ' sel' : ''}`}
+          onClick={(e) => {
+            e.preventDefault();
+            onPick(t);
+          }}
+        >
           <span className={`tag ${t.counted ? 'hot' : 'dep'}`}>
             <span>{i + 1}</span>
           </span>
@@ -178,20 +193,65 @@ function Pager({ tags, selected, onPick }: { tags: Tag[]; selected: Selected; on
             </b>
             <small>{t.reason}</small>
           </span>
-          <em className="chip">{t.counted ? 'counts' : classWords[t.cls]}</em>
-        </button>
+          <em className="chip">{chip(t)}</em>
+        </a>
       ))}
-      {shown < sorted.length ? (
+      {shown < tags.length ? (
         <button type="button" className="more-btn" onClick={() => setShown(shown + 20)}>
-          Show 20 more of {sorted.length - shown}
+          Show 20 more of {tags.length - shown}
         </button>
       ) : null}
     </div>
   );
 }
 
-export function FailingAndTrace({ board, selected, onPick }: { board: BoardData; selected: Selected; onPick: (t: Tag) => void }) {
-  if (board.tags.length === 0) {
+/** Everything about one request that failed: where, why, and how to point someone at it. */
+function OpenTrace({ selected, links }: { selected: Selected; links: TraceLinks }) {
+  const [copied, setCopied] = useState(false);
+  const tag = selected.tag;
+  if (!tag) return <p className="muted">Select a failing request to see its spans.</p>;
+  return (
+    <>
+      <div className="trace-head">
+        <p className="muted small">
+          {tag.id.slice(0, 8)} on {tag.route}, {ms(tag.durationMs)}
+        </p>
+        <span className="trace-actions">
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              void navigator.clipboard?.writeText(links.href(tag.id)).then(() => {
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 1500);
+              });
+            }}
+          >
+            {copied ? 'Link copied' : 'Copy link'}
+          </button>
+          {links.jaeger ? (
+            <a className="link-btn" href={links.jaeger(tag.id)} target="_blank" rel="noreferrer">
+              Open in Jaeger
+            </a>
+          ) : null}
+        </span>
+      </div>
+      <Waterfall spans={selected.spans} loading={selected.loading} origins={tag.origins} />
+      <p className="reason">{tag.reason}</p>
+    </>
+  );
+}
+
+const CHIP = (t: Tag): string => (t.counted ? 'counts' : classWords[t.cls]);
+
+export function FailingAndTrace({ board, selected, onPick, tab, setTab, links }: { board: BoardData; selected: Selected; onPick: (t: Tag) => void; tab: FailTab; setTab: (t: FailTab) => void; links: TraceLinks }) {
+  const countedAll = board.tags.filter((t) => t.counted).sort((a, b) => a.atMs - b.atMs);
+  // The engine counts up to the crossing; failures after it, before the switch-off is confirmed, are shown as a note.
+  const counted = countedAll.slice(0, Math.max(board.state.counted, 0) || countedAll.length);
+  const after = countedAll.length - counted.length;
+  const excluded = board.tags.filter((t) => !t.counted).sort((a, b) => a.atMs - b.atMs);
+  const stable = board.stableTags;
+  if (board.tags.length === 0 && stable.length === 0) {
     return (
       <section className="card" aria-label="Failing requests">
         <h2>Failing requests</h2>
@@ -199,26 +259,102 @@ export function FailingAndTrace({ board, selected, onPick }: { board: BoardData;
       </section>
     );
   }
+  const tabs: { key: FailTab; label: string; n: number }[] = [
+    { key: 'counted', label: 'Counted', n: counted.length },
+    { key: 'excluded', label: 'Not counted', n: excluded.length },
+    { key: 'stable', label: 'Stable version, same period', n: stable.length },
+  ];
+  const list = tab === 'counted' ? counted : tab === 'excluded' ? excluded : stable;
   return (
     <section className="card two" aria-label="Failing requests and trace">
       <div>
         <h2>Failing requests</h2>
-        <p className="muted small">Only requests with the flag on. Counted ones first.</p>
-        <Pager tags={board.tags} selected={selected} onPick={onPick} />
+        <div className="tabs" role="tablist" aria-label="Which failing requests">
+          {tabs.map((t) => (
+            <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={tab === t.key ? 'on' : ''} onClick={() => setTab(t.key)}>
+              {t.label} <b>({t.key === 'stable' ? `${t.n} failed` : t.n})</b>
+            </button>
+          ))}
+        </div>
+        <p className="muted small">
+          {tab === 'counted'
+            ? "Failures in the feature's own code, with the flag on. These count toward the switch-off."
+            : tab === 'excluded'
+              ? 'Failures with the flag on that happened in a dependency or the server. They do not count, and each says why.'
+              : 'Requests of the stable version that failed in the same period, so you can open one that failed at the same span.'}
+        </p>
+        {list.length === 0 ? <p className="muted">Nothing here.</p> : <Pager key={tab} tags={list} selected={selected} onPick={onPick} links={links} chip={tab === 'stable' ? () => 'stable' : CHIP} />}
+        {tab === 'counted' && after > 0 ? <p className="muted small">{after} more failed in the feature's own code while the switch-off was being confirmed.</p> : null}
       </div>
       <div className="sticky">
         <h2>Trace</h2>
-        {selected.tag ? (
-          <>
-            <p className="muted small">
-              {selected.tag.id.slice(0, 8)} on {selected.tag.route}, {ms(selected.tag.durationMs)}
-            </p>
-            <Waterfall spans={selected.spans} loading={selected.loading} origins={selected.tag.origins} />
-            <p className="reason">{selected.tag.reason}</p>
-          </>
-        ) : (
-          <p className="muted">Select a failing request to see its spans.</p>
-        )}
+        <OpenTrace selected={selected} links={links} />
+      </div>
+    </section>
+  );
+}
+
+/** The same failing points in the flag-on and the stable requests, from the engine's baseline. Exists at every moment of every run. */
+export function Comparison({ board, onPick, links }: { board: BoardData; onPick: (t: Tag) => void; links: TraceLinks }) {
+  const rows = board.record?.baseline ?? board.baseline;
+  if (rows.length === 0) return null;
+  const flag = board.state.config.flag;
+  const example = (list: Tag[], route: string, span: string): Tag | undefined => list.find((t) => t.route === route && t.origins.some((o) => o.name === span));
+  return (
+    <section className="card compare" aria-label="Compared with the stable version">
+      <h2>Compared with the stable version</h2>
+      <p className="muted small">The same route and span, flag on against the stable version, over the same period.</p>
+      <div className="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th className="left">Route and span</th>
+              <th>{flag} requests</th>
+              <th>failed</th>
+              <th>
+                <Gloss term="p95">p95</Gloss>
+              </th>
+              <th>stable requests</th>
+              <th>failed</th>
+              <th>p95</th>
+              <th className="left">Most common reason</th>
+              <th className="left">Examples</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((b) => {
+              const on = example(board.tags, b.route, b.span);
+              const off = example(board.stableTags, b.route, b.span);
+              return (
+                <tr key={`${b.route}${b.span}`}>
+                  <td className="mono left">
+                    {b.route}, {b.span}
+                    {b.spanExistsInStable ? '' : ' (not in stable, compared at the route)'}
+                  </td>
+                  <td>{b.flagOn.requests}</td>
+                  <td>{b.flagOn.failures}</td>
+                  <td>{ms(b.flagOn.p95Ms)}</td>
+                  <td>{b.stable.requests}</td>
+                  <td>{b.stable.failures}</td>
+                  <td>{ms(b.stable.p95Ms)}</td>
+                  <td className="why left">{b.why}</td>
+                  <td className="left ex">
+                    {on ? (
+                      <a href={links.href(on.id)} onClick={(e) => { e.preventDefault(); onPick(on); }}>
+                        flag on
+                      </a>
+                    ) : null}
+                    {off ? (
+                      <a href={links.href(off.id)} onClick={(e) => { e.preventDefault(); onPick(off); }}>
+                        stable
+                      </a>
+                    ) : null}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </section>
   );
@@ -290,7 +426,38 @@ export function FlagsmithNumbers({ board, small }: { board: BoardData; small?: b
   );
 }
 
-export function Record({ board }: { board: BoardData }) {
+/** "Why this verdict": the author's four-part rule with the engine's numbers, each line a link to its evidence. */
+export function WhyVerdict({ board, finished, onGo, hrefFor }: { board: BoardData; finished: boolean; onGo: (t: WhyTarget) => void; hrefFor: (t: WhyTarget) => string }) {
+  const lines = whyVerdict(board, finished);
+  return (
+    <section className="why" aria-label="Why this verdict">
+      <h2>Why this verdict</h2>
+      <ol>
+        {lines.map((l) => (
+          <li key={l.n} className={`w${l.n}`}>
+            <a
+              href={hrefFor(l.target)}
+              onClick={(e) => {
+                e.preventDefault();
+                onGo(l.target);
+              }}
+            >
+              <span className="wn" aria-hidden="true">
+                {l.n}
+              </span>
+              <span className="wt">
+                <b>{l.lead}</b>
+                {l.text}
+              </span>
+            </a>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+export function Record({ board, figures }: { board: BoardData; figures?: Figures | undefined }) {
   const r = board.record;
   if (!r) return null;
   const f = r.flagsmith;
@@ -331,43 +498,23 @@ export function Record({ board }: { board: BoardData }) {
         </div>
         <div>
           <FlagsmithNumbers board={board} />
+          {figures?.rollout || figures?.results ? (
+            <div className="figures">
+              {figures.rollout ? (
+                <figure>
+                  <img src={videoUrl(figures.rollout)} loading="lazy" alt="Flagsmith's experiment page after the switch-off, showing Current rollout 0%" />
+                  <figcaption>Flagsmith's own experiment page after the switch-off: Current rollout 0%</figcaption>
+                </figure>
+              ) : null}
+              {figures.results ? (
+                <figure>
+                  <img src={videoUrl(figures.results)} loading="lazy" alt="Flagsmith's results table for the same experiment" />
+                  <figcaption>Flagsmith's results table for the same experiment</figcaption>
+                </figure>
+              ) : null}
+            </div>
+          ) : null}
         </div>
-      </div>
-      <h3>Compared with the stable version</h3>
-      <div className="scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Route and span</th>
-              <th>{r.flag} requests</th>
-              <th>failed</th>
-              <th>
-                <Gloss term="p95">p95</Gloss>
-              </th>
-              <th>stable requests</th>
-              <th>failed</th>
-              <th>p95</th>
-              <th className="left">Most common reason</th>
-            </tr>
-          </thead>
-          <tbody>
-            {r.baseline.map((b) => (
-              <tr key={`${b.route}${b.span}`}>
-                <td className="mono left">
-                  {b.route}, {b.span}
-                  {b.spanExistsInStable ? '' : ' (not in stable, compared at the route)'}
-                </td>
-                <td>{b.flagOn.requests}</td>
-                <td>{b.flagOn.failures}</td>
-                <td>{ms(b.flagOn.p95Ms)}</td>
-                <td>{b.stable.requests}</td>
-                <td>{b.stable.failures}</td>
-                <td>{ms(b.stable.p95Ms)}</td>
-                <td className="why left">{b.why}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </section>
   );

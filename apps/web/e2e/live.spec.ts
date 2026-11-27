@@ -119,6 +119,9 @@ test('a live board shows nothing from the recorded runs', async ({ page, request
     for (const marker of markers) expect(text, `the live board shows "${marker}" from a recorded run`).not.toContain(marker);
     expect(text).not.toContain('Replay of a recorded run');
     await expect(page.getByRole('group', { name: 'Try these' })).toHaveCount(0);
+    // "Why this verdict" is built from the live guard's numbers, never a recorded run's.
+    await expect(page.getByRole('region', { name: 'Why this verdict' })).toContainText("1 failure in the feature's own code", { useInnerText: true });
+    await expect(page.getByRole('region', { name: 'Why this verdict' })).not.toContainText('pg.connect');
     expect(fetched.filter((u) => u.includes('/runs/')), 'a recorded run was fetched by the live board').toEqual([]);
   } finally {
     server.close();

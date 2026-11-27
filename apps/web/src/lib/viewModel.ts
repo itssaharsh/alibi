@@ -1,4 +1,4 @@
-import type { CauseLabel, FlagsmithExperimentSummary, FlatSpan, GuardEvent, GuardState, InvestigationRecord, OriginSpan, TraceVerdict, FailureClass } from '@alibi/core';
+import type { BaselineRow, CauseLabel, FlagsmithExperimentSummary, FlatSpan, GuardEvent, GuardState, InvestigationRecord, OriginSpan, TraceVerdict, FailureClass } from '@alibi/core';
 
 /** One failing request that had the flag on. Times are milliseconds from the start of the run. */
 export interface Tag {
@@ -37,6 +37,10 @@ export interface Snapshot {
   endMs: number;
   state: GuardState;
   newTags: Tag[];
+  /** Failed requests of the stable version, for the "same period" list. */
+  newStableTags?: Tag[];
+  /** The engine's baseline over the requests so far: the same failing points in flag-on and in stable. */
+  baseline?: BaselineRow[];
   newMoments: Moment[];
   timeline: TimelineLine[];
   record?: InvestigationRecord;
@@ -65,6 +69,8 @@ export interface Board {
   endMs: number;
   state: GuardState;
   tags: Tag[];
+  stableTags: Tag[];
+  baseline: BaselineRow[];
   moments: Moment[];
   timeline: TimelineLine[];
   record?: InvestigationRecord;
@@ -78,7 +84,13 @@ export interface Board {
 }
 
 export function tagOf(verdict: TraceVerdict, baseMs: number): Tag | undefined {
-  if (!verdict.failed || !verdict.flagOn || !verdict.failureClass) return undefined;
+  if (!verdict.flagOn) return undefined;
+  return anyTagOf(verdict, baseMs);
+}
+
+/** A failed request of either arm, as a tag. */
+export function anyTagOf(verdict: TraceVerdict, baseMs: number): Tag | undefined {
+  if (!verdict.failed || !verdict.failureClass) return undefined;
   return {
     id: verdict.traceId,
     atMs: verdict.endMs - baseMs,
@@ -112,19 +124,20 @@ export function momentOf(event: GuardEvent, baseMs: number): Moment | undefined 
 }
 
 /** Tags and moments from engine events. */
-export function deltaOf(events: readonly GuardEvent[], baseMs: number): { tags: Tag[]; moments: Moment[] } {
+export function deltaOf(events: readonly GuardEvent[], baseMs: number): { tags: Tag[]; stableTags: Tag[]; moments: Moment[] } {
   const tags: Tag[] = [];
+  const stableTags: Tag[] = [];
   const moments: Moment[] = [];
   for (const event of events) {
     if (event.type === 'verdict') {
-      const tag = tagOf(event.verdict, baseMs);
-      if (tag) tags.push(tag);
+      const tag = anyTagOf(event.verdict, baseMs);
+      if (tag) (event.verdict.flagOn ? tags : stableTags).push(tag);
     } else {
       const moment = momentOf(event, baseMs);
       if (moment) moments.push(moment);
     }
   }
-  return { tags, moments };
+  return { tags, stableTags, moments };
 }
 
 export function boardFrom(meta: RunMeta, snapshot: Snapshot): Board {
@@ -134,6 +147,8 @@ export function boardFrom(meta: RunMeta, snapshot: Snapshot): Board {
     endMs: snapshot.endMs,
     state: snapshot.state,
     tags: snapshot.newTags,
+    stableTags: snapshot.newStableTags ?? [],
+    baseline: snapshot.baseline ?? [],
     moments: snapshot.newMoments,
     timeline: snapshot.timeline,
     ...(snapshot.record ? { record: snapshot.record } : {}),
@@ -149,6 +164,8 @@ export function applySnapshot(board: Board, snapshot: Snapshot): Board {
     endMs: snapshot.endMs,
     state: snapshot.state,
     tags: snapshot.newTags.length ? [...board.tags, ...snapshot.newTags] : board.tags,
+    stableTags: snapshot.newStableTags?.length ? [...board.stableTags, ...snapshot.newStableTags] : board.stableTags,
+    baseline: snapshot.baseline ?? board.baseline,
     moments: snapshot.newMoments.length ? [...board.moments, ...snapshot.newMoments] : board.moments,
     timeline: snapshot.timeline,
     ...(snapshot.record ? { record: snapshot.record } : {}),

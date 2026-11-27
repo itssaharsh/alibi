@@ -54,6 +54,7 @@ for (const name of files) {
     const rest = snapshot.newTags.filter((t) => !t.counted);
     snapshot.newTags = [...counted.slice(0, 100), ...rest.slice(0, MAX_TAGS - Math.min(100, counted.length))];
   }
+  if ((snapshot.newStableTags?.length ?? 0) > MAX_TAGS) snapshot.newStableTags = (snapshot.newStableTags ?? []).slice(0, MAX_TAGS);
   const first = snapshot.newTags.find((t) => t.counted) ?? snapshot.newTags[0];
   // Exception stack traces are left out of the summary; the page draws names, bars and times.
   const featured = first
@@ -99,5 +100,14 @@ if (existsSync(videoFile)) {
 } else {
   rmSync(videoJson, { force: true });
 }
+
+// Real stills of Flagsmith's own experiment page, when they are in public/: the page shows them under the record.
+const stills = [
+  ['rollout.png', 'flagsmith-rollout.png'],
+  ['results.png', 'flagsmith-results.png'],
+].filter(([, f]) => existsSync(join(publicDir, f as string)));
+const figuresJson = join(publicDir, 'figures.json');
+if (stills.length > 0) writeFileSync(figuresJson, JSON.stringify({ rollout: stills.some(([k]) => k === 'rollout.png') ? 'flagsmith-rollout.png' : undefined, results: stills.some(([k]) => k === 'results.png') ? 'flagsmith-results.png' : undefined }));
+else rmSync(figuresJson, { force: true });
 
 console.log(`prepared ${runs.length} runs: ${runs.map((r) => `${r.name} (${(r.size / 1e6).toFixed(1)} MB)`).join(', ')}`);
