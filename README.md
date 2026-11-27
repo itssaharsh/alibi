@@ -17,13 +17,25 @@ The trace already knows. Every failing request says where it failed: in the new 
 
 These ran on a real stack: self-hosted Flagsmith 2.295.2, a shop instrumented with OpenTelemetry, two requests a second from 600 scripted shoppers, recorded on 27 November 2026.
 
-| Run | What was done to the shop | What Alibi did | A plain error-rate rule on the same requests |
-|---|---|---|---|
-| **The database outage** | The database was stopped for 90 seconds | 97 requests with the flag on failed. All 97 failed in `pg.connect`, a dependency call. Alibi counted 0 and left the flag on | would have switched the healthy feature off 16 seconds into the outage |
-| **The coupon bug** | Carts with a coupon crash inside `checkout_v2.apply_coupon` | Counted each one. At the 16th it set the rollout to 0% in Flagsmith and confirmed 20 of 20 identities got the stable checkout. Errors and latency were back at the stable version's level a minute later. Label: **probably the feature** | would also have switched it off, 31 seconds sooner |
-| **The slow host** | The shop's CPU was throttled to a twentieth of a core | The new checkout's own time budget failed 16 times, so the flag went off. Errors stopped, but p95 latency stayed at 330 ms against a stable level of 42 ms. Label: **probably not the feature** | would have switched it off and said nothing more |
+| Run | What was done to the shop | What Alibi did |
+|---|---|---|
+| **The database outage** | The database was stopped for 90 seconds | 97 requests with the flag on failed. All 97 failed in `pg.connect`, a dependency call. Alibi counted 0 and left the flag on |
+| **The coupon bug** | Carts with a coupon crash inside `checkout_v2.apply_coupon` | Counted each one. At the 16th it set the rollout to 0% in Flagsmith and confirmed 20 of 20 identities got the stable checkout. Errors and latency were back at the stable version's level a minute later. Label: **probably the feature** |
+| **The slow host** | The shop's CPU was throttled to a twentieth of a core | The new checkout's own time budget failed 16 times, so the flag went off. Errors stopped, but p95 latency stayed at 330 ms against a stable level of 42 ms. Label: **probably not the feature** |
 
-Alibi is slower than a plain rule on a real bug by design: it waits for 16 failures in the feature's own code. What it buys is the first row, and the last column of the other two: a record that says what it saw and stops at "probably".
+In the slow-host run the rule did what it says: the feature's own code was failing, so the flag went off. The five-minute watch is how Alibi found out the feature was probably not why.
+
+### Against two simpler rules, on the same requests
+
+Alibi replays every run through two rules that need no traces, and shows what each would have done:
+
+| Run | Plain error-rate rule (flag-on errors over 20% in 30 s) | Arm comparison (flag on against stable over 60 s) | Alibi |
+|---|---|---|---|
+| The database outage | switches the healthy feature off at +01:16 | at a 10-point margin, switches it off at +01:22 (39.1% against 28.8%); holds only from a 20-point margin up | 0 counted, flag stays on |
+| The coupon bug | off at +01:58 | off at +01:58 (10 points) or +02:20 (20 points) | off at +02:30, with the failing span, then "probably the feature" |
+| The slow host | off at +01:36 | off at +01:36 (10 points) or +01:44 (20 points) | off at +01:48, then "probably not the feature" |
+
+Read it honestly: on a real bug both simpler rules are faster than Alibi, which waits for 16 failures in the feature's own code. And an arm comparison with a wide enough margin gets all three decisions right. What it needs is that margin, picked in advance: during the outage both variations were failing, and with about 50 requests in each the gap between them reached 19 points on noise alone (at the moment the 10-point rule tripped, 18 of 46 against 19 of 66, the two-proportion p-value is 0.25). Alibi has no margin to pick, because it does not compare rates: each of the 97 failures says it failed in `pg.connect`. That is what reading the trace buys: the reason for every request, and a record that stops at "probably".
 
 ![The coupon bug at the moment the counter passes 15](docs/img/coupon-switch.png)
 
@@ -44,25 +56,31 @@ The coupon bug
 Planted: Carts with the SAVE10 coupon crash inside the new checkout's own code.
 Source: self-hosted Flagsmith 2.295.2, recorded 27 Nov 2026
 
+Timeline
++00:00  Run "coupon-bug" started: 2 requests per second from 600 shoppers.
 +01:30  Carts with the SAVE10 coupon began (about 1 in 5).
 +01:33  Flag-on request failed on /checkout (trace 9dce3ca3). Failed in checkout_v2.apply_coupon, a span on the flagged path: TypeError: Cannot read properties of undefined (reading 'percent'). Counts toward the switch-off.
         ... 17 more lines like this one, one per failing request ...
++01:58  Arm comparison (flag on against stable): would have switched the flag off here, flag on 10.2% against stable 0.0% over the last 60 seconds.
 +01:58  Plain error-rate rule: would have switched the flag off here, 25.0% of 20 flag-on requests failed in 30 seconds.
 +02:29  Counter passed 15: 16 failures on the flagged path with the flag on. Switch-off requested.
++02:30  Flagsmith check passed: 20 of 20 identities checked get stable
 +02:30  Flagsmith confirmed the switch-off: checkout_v2 rollout set to 0% in Flagsmith; 20 of 20 identities checked get stable
 +02:30  Watch started for 5 minutes. Stable version level, measured before the first counted failure: 0.0% errors, p95 32 ms, 93 requests.
 +03:30  Error rate and latency are back at the stable version's level over the last 60 seconds: 0.0% errors, p95 30 ms, 113 requests.
-+07:31  Label: probably the feature (not proven). A person investigates.
++07:31  Label: probably the feature (not proven). A person investigates. After the switch-off: 0.0% errors, p95 30 ms, 594 requests. Record checkout_v2-1795744160914.
++09:00  Run "coupon-bug" ended.
 
 Summary
   Flag-on failures: 18
   Counted toward the switch-off: 16 (the flag goes off above 15)
   Not counted: 0 from a dependency, 0 from the server, 0 mixed
   Plain error-rate rule: would have switched the flag off at +01:58
+  Arm comparison (flag on against stable): would have switched the flag off at +01:58, flag on 10.2% against stable 0.0% over the last 60 seconds.
   Result: probably the feature (not proven). A person investigates.
 ```
 
-The output above is shortened where it says so. The page and the command run the same engine on the same recorded spans. Only Flagsmith's answers are replayed from the recording.
+The output is shortened in the one place it says so. The page and the command run the same engine on the same recorded spans. Only Flagsmith's answers are replayed from the recording.
 
 ## Quickstart: run it yourself
 
@@ -169,7 +187,7 @@ flowchart LR
 - You wrap the feature's code in one span that carries `alibi.flagged_path=<flag>`.
 - The collector you already run gets one more exporter.
 - For each failing request, Alibi finds the span where the error started and classes the request: flagged path, dependency, server, or mixed. It writes one sentence from that span's own fields, for example: "Failed in pg.connect, a dependency call (db.system.name=postgresql): Connection terminated unexpectedly. The dependency was unavailable, so this does not count."
-- The engine (`packages/core`) is pure TypeScript with no dependencies. The guard service and the page run the same code, and 140 tests pin its sentences word for word, including on spans captured from the real stack and on the three recorded runs.
+- The engine (`packages/core`) is pure TypeScript with no dependencies. The guard service and the page run the same code, and 146 tests pin its sentences word for word, including on spans captured from the real stack and on the three recorded runs.
 
 The attribute names follow OpenTelemetry's feature-flag semantic conventions, which are still a release candidate, so this is not a conformance claim.
 
