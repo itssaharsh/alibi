@@ -146,7 +146,7 @@ Take Flagsmith out and nothing is left. It decides who gets the feature, it is t
 | Experiment rollout, through the Admin API | The switch. Alibi sets the experiment's rollout to 0%, then evaluates 20 identities and requires every one to get `stable` before it reports the switch-off | `packages/guard/src/flagsmith.ts` |
 | Experiment results | Flagsmith's own numbers per variation go into the investigation record | the record on the live page |
 
-In the coupon run, Flagsmith's engine, fed only from spans, gave the new checkout a 0.01% chance of beating the stable one on completed checkouts (89.1% against 100%; lift −10.9%, interval −16.8% to −5.1%). In the outage run it could not tell them apart (70.2% against 75.9%, 11% chance), which is the right answer: nothing was wrong with the feature.
+In the coupon run, Flagsmith's engine, fed only from spans, gave the new checkout a 0.013% chance of beating the stable one on completed checkouts (89.1% against 100%; lift −10.9%, interval −16.8% to −5.1%). In the outage run it could not tell them apart (70.2% against 75.9%, 11% chance), which is the right answer: nothing was wrong with the feature.
 
 ![The investigation record, with Flagsmith's numbers](docs/img/record.png)
 
