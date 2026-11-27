@@ -22,11 +22,26 @@ This starts only Alibi and its live board. Everything else is yours: your Flagsm
 
 Optional: a Feature Health webhook (Project Settings, Feature Health, create a Webhook provider). Put its address in `FLAGSMITH_FEATURE_HEALTH_URL` and Alibi marks the flag unhealthy, with the reason, after a switch-off. It never marks it healthy.
 
-## Start Alibi
+## Start Alibi without cloning anything
+
+The images are published, so a folder with two files is enough. You need Docker with Compose:
+
+```bash
+mkdir alibi && cd alibi
+curl -fsSLO https://raw.githubusercontent.com/itssaharsh/alibi/main/deploy/attach/docker-compose.images.yml
+curl -fsSL https://raw.githubusercontent.com/itssaharsh/alibi/main/deploy/attach/.env.example -o .env
+# fill in four values in .env: FLAGSMITH_API_URL, FLAGSMITH_ENVIRONMENT_KEY, FLAGSMITH_ADMIN_KEY, ALIBI_FLAG
+docker compose -f docker-compose.images.yml up -d --wait
+```
+
+This pulls `ghcr.io/itssaharsh/alibi-guard` and `ghcr.io/itssaharsh/alibi-board` (`linux/amd64`). Set `FLAGSMITH_EXPERIMENT_ID` too if the flag is in an experiment (see below). Then point your collector at port 4319.
+
+## Start Alibi from a clone
+
 
 ```bash
 cd deploy/attach
-cp .env.example .env      # fill in the six values at the top
+cp .env.example .env      # fill in the values at the top
 docker compose up -d --build --wait
 ```
 
@@ -69,7 +84,7 @@ Use the host name that reaches Alibi from your collector (`localhost:4319` if th
 
 ## When something is missing
 
-- Alibi will not start without `FLAGSMITH_API_URL`, `FLAGSMITH_ENVIRONMENT_KEY`, `FLAGSMITH_ADMIN_KEY`, `ALIBI_FLAG` and `ALIBI_STABLE_VARIATION`; Compose stops first and names the one that is missing. With `ALIBI_SWITCH_OFF=rollout-zero` it also needs `FLAGSMITH_EXPERIMENT_ID`. A value that is not usable is named in one line, for example `PORT must be a whole number above 0`.
+- Alibi will not start without `FLAGSMITH_API_URL`, `FLAGSMITH_ENVIRONMENT_KEY`, `FLAGSMITH_ADMIN_KEY` and `ALIBI_FLAG`; Compose stops first and names the one that is missing. The stable value is `stable` unless you set `ALIBI_STABLE_VARIATION`. With `ALIBI_SWITCH_OFF=rollout-zero` it also needs `FLAGSMITH_EXPERIMENT_ID`. A value that is not usable is named in one line, for example `PORT must be a whole number above 0`.
 - If Flagsmith cannot be reached or refuses the rollout change, the board says **switch-off not confirmed** with Flagsmith's answer and Alibi tries again. It never reports a switch-off that an evaluation of 20 identities did not confirm.
 - If the metrics or the experiment results are missing, or there is no experiment, the record is written without Flagsmith's numbers.
 - `GET http://127.0.0.1:4319/api/state` shows what Alibi sees: spans received, events sent to Flagsmith and how many it accepted, and the switch-off state.

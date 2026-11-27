@@ -254,9 +254,20 @@ Read it honestly:
 - **Where both were right, neither was reliably sooner.** In the six runs with an outage and a bug together, Alibi acted first in four and the simple rule in two.
 - **Not scored:** the same comparison at a 10-point margin acted in 10 of the 12 infrastructure-only runs, and the plain error-rate rule in 9 of 12.
 
+**Two more rules, added after the runs.** Reviewers asked whether the 20-point rule loses mostly because of its 60-second window. So two rules with no window and no traces were written down in [`runs/outage-scenarios/ADDENDUM.md`](runs/outage-scenarios/ADDENDUM.md), committed, and only then computed on the same recordings:
+
+| Rule | Right in the 24 planned runs | Right in the 18 earlier runs |
+|---|---|---|
+| Alibi's count | 24 | 12 |
+| The 20-point rule | 17 | 12 |
+| Excess failures: act when the flag-on version has over 15 more failures than the stable one | 20 | 8 |
+| Cumulative test: act when a two-proportion test on all requests so far gives p below 0.001 | 17 | 12 |
+
+Subtracting the stable version's failures gets close to Alibi on the planned runs. It catches the rare bug at the same moment Alibi does. It is wrong in the three definition runs and once in the flaky database, where the flag-on version was at one point 16 failures ahead by chance. On the earlier runs it switched the healthy feature off in four of the six database outages, for the same reason: in an outage it decides on the difference between two noisy counts, and Alibi does not, because each failure says where it failed. The cumulative test misses four of the six runs with an outage and a bug together, because the outage's failures drown the bug's. Flagsmith's own experiment result, read at the end of the 15 runs where Alibi's count never crossed, gave the new checkout practically no chance of winning (under 0.001%) in the three definition runs, where it did complete fewer checkouts, and between 9% and 89% in the other twelve.
+
 The same scoring applied to the eighteen earlier runs, after the fact: both rules are right in 12 and wrong in 6. The six are the slow-host runs. The fault was the host, the new checkout's time budget failed because of it, and both rules switched the flag off. Alibi's watch then labelled all six "probably not the feature".
 
-Over all 42 runs: Alibi right in 36, the 20-point rule in 29. Every run, with its failures by class, both rules' times and the checks that each scripted fault really happened, is in [`runs/outage-scenarios/RESULTS.md`](runs/outage-scenarios/RESULTS.md). Three runs a scenario show what happened three times; they are not a study.
+Over all 42 runs: Alibi right in 36, the 20-point rule in 29, the cumulative test in 29, excess failures in 28. Every run, with its failures by class, both rules' times and the checks that each scripted fault really happened, is in [`runs/outage-scenarios/RESULTS.md`](runs/outage-scenarios/RESULTS.md). Three runs a scenario show what happened three times; they are not a study.
 
 The two extra runs on the page, the feature's own service going down and the rare bug, were recorded after these, with Alibi acting instead of observing. They are there to be looked at and are in none of the totals.
 
@@ -323,7 +334,7 @@ Limits worth knowing before you rely on it:
 - **A dependency that only the new code calls.** If it is down, those failures do not count, because the rule calls that infrastructure. Alibi raises a notice instead ("the stable version never makes this call, so a person should look"); it does not switch the flag off. Three of the planned runs are this case. If you would rather switch off there, Alibi's rule is the wrong rule for you.
 - **A feature that breaks something shared.** If the new code overloads the database for everyone, every failure is a dependency failure in both versions, and by the rule none of them count. Alibi raises a notice when a shared dependency fails far more often with the flag on than in the stable version (30 points apart, at least 20 requests each), because the rule asks for that comparison. If both versions fail alike, nothing tells it apart from an outage, and a person has to catch it.
 - **It needs a stable arm.** The level that "recovered" is tested against comes from requests that got the stable version, so a flag that is on for everyone has nothing to compare with.
-- **Forty-four runs of one scripted shop.** They are recorded and repeatable, not a study of real traffic. The comparison is against the two simpler rules named above; other baselines, such as a sequential test or acting on Flagsmith's own experiment result, were not run.
+- **Forty-four runs of one scripted shop.** They are recorded and repeatable, not a study of real traffic. The comparison is against the simple rules named above; a sequential test built for looking after every request was not run.
 
 ## Built with
 

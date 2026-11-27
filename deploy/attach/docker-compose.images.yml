@@ -1,0 +1,43 @@
+# The same as docker-compose.yml, from the published images: no clone and no build. Save this file and .env.example
+# (as .env) in an empty folder, fill in .env, then:
+#   docker compose up -d --wait
+# Alibi listens on port 4319 for OTLP/HTTP JSON from your OpenTelemetry Collector; the board is on port 4173.
+name: alibi-attach
+
+services:
+  alibi:
+    image: ghcr.io/itssaharsh/alibi-guard:latest
+    restart: unless-stopped
+    environment:
+      FLAGSMITH_API_URL: ${FLAGSMITH_API_URL:?set FLAGSMITH_API_URL in .env}
+      FLAGSMITH_ENVIRONMENT_KEY: ${FLAGSMITH_ENVIRONMENT_KEY:?set FLAGSMITH_ENVIRONMENT_KEY in .env}
+      FLAGSMITH_ADMIN_KEY: ${FLAGSMITH_ADMIN_KEY:?set FLAGSMITH_ADMIN_KEY in .env}
+      FLAGSMITH_EXPERIMENT_ID: ${FLAGSMITH_EXPERIMENT_ID:-}
+      FLAGSMITH_FEATURE_ID: ${FLAGSMITH_FEATURE_ID:-}
+      ALIBI_SWITCH_OFF: ${ALIBI_SWITCH_OFF:-}
+      ALIBI_FLAG: ${ALIBI_FLAG:?set ALIBI_FLAG in .env}
+      ALIBI_STABLE_VARIATION: ${ALIBI_STABLE_VARIATION:-stable}
+      ALIBI_THRESHOLD: ${ALIBI_THRESHOLD:-15}
+      ALIBI_WATCH_MS: ${ALIBI_WATCH_MS:-300000}
+      FLAGSMITH_FEATURE_HEALTH_URL: ${FLAGSMITH_FEATURE_HEALTH_URL:-}
+      ALIBI_CONTROL_TOKEN: ${ALIBI_CONTROL_TOKEN:-}
+      ALIBI_DATA: /data
+      ALIBI_RECORD_DIR: /data/runs
+    volumes:
+      - alibi-data:/data
+    ports:
+      - ${ALIBI_BIND:-127.0.0.1}:4319:4319
+    mem_limit: 256m
+
+  board:
+    image: ghcr.io/itssaharsh/alibi-board:latest
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:${ALIBI_BOARD_PORT:-4173}:4173
+    mem_limit: 64m
+    depends_on:
+      alibi:
+        condition: service_healthy
+
+volumes:
+  alibi-data:

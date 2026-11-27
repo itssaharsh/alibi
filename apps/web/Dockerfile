@@ -13,6 +13,7 @@ COPY apps/web apps/web
 RUN cd apps/web && VITE_LIVE_SAME_ORIGIN=1 VITE_JAEGER_URL=http://127.0.0.1:16686 npm run build
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine
+LABEL org.opencontainers.image.source="https://github.com/itssaharsh/alibi" org.opencontainers.image.licenses="MIT"
 # Server-sent events (/api/events) must not be buffered: buffering would hold every event until the stream ends.
 RUN cat > /etc/nginx/conf.d/default.conf <<'CONF'
 server {

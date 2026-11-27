@@ -14,6 +14,7 @@ RUN cd packages/guard && npm run build \
  && cd ../core && npm prune --omit=dev --no-audit --no-fund
 
 FROM node:22-alpine
+LABEL org.opencontainers.image.source="https://github.com/itssaharsh/alibi" org.opencontainers.image.licenses="MIT"
 ENV NODE_ENV=production PORT=4319 ALIBI_DATA=/data
 RUN mkdir /data && chown node:node /data
 WORKDIR /app/packages

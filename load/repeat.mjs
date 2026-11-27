@@ -5,7 +5,7 @@
 //   node load/repeat.mjs [--n 5] [--only outage|coupon-bug|degraded-host] [--resume]
 //   node load/repeat.mjs --add-plain <dir>   (adds the runs of a flag that is not in an experiment: <dir>/<scenario>/state.json and
 //                                             <dir>/<scenario>/<run name>.jsonl, kept under "withoutExperiment" in summary.json)
-//   node load/repeat.mjs --regap <plain evidence dir>   (recomputes the times and the widest gap of every row from the kept run files)
+//   node load/repeat.mjs --regap <plain evidence dir> [--evidence <repeats dir>]   (recomputes the times and the widest gap of every row from the kept run files)
 //   node load/repeat.mjs --analyse <run file> --scenario <name> [--state <state.json>]   (no stack needed)
 //
 // For every run: `docker compose down -v`, `up -d --build --wait`, the scenario at 2 requests a second (the run arms the
@@ -28,7 +28,7 @@ const COMPOSE = ['compose', '-f', join(ROOT, 'deploy', 'docker-compose.yml')];
 const GUARD = process.env.ALIBI_URL ?? 'http://127.0.0.1:4319';
 const FLAGSMITH = process.env.FLAGSMITH_URL ?? 'http://127.0.0.1:8000';
 const OUT = join(ROOT, 'runs', 'repeats');
-const EVIDENCE = join(homedir(), 'gta-evidence', 'repeats');
+let EVIDENCE = join(homedir(), 'gta-evidence', 'repeats');
 const SCENARIOS = { outage: 'outage', 'coupon-bug': 'coupon-bug', 'degraded-host': 'slow-host' };
 const PROGRESS = process.env.REPEAT_PROGRESS ?? '/tmp/repeats/progress';
 const WINDOW_MS = 60_000;
@@ -209,6 +209,7 @@ async function main() {
   }
   if (args.regap) {
     // Recomputes the times and the widest gap of every row in summary.json from the run files kept as evidence.
+    if (args.evidence) EVIDENCE = resolve(args.evidence);
     const names = { outage: 'outage', 'coupon-bug': 'coupon-bug', 'degraded-host': 'slow-host' };
     const stored = readSummary();
     const fix = (row, file) => {

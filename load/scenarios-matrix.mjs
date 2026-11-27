@@ -4,7 +4,9 @@
 //
 //   node load/scenarios-matrix.mjs --commit <hash> [--rounds 3] [--only <scenario>]   the counted runs, each from a fresh stack
 //   node load/scenarios-matrix.mjs --dev <scenario> [--minutes N] [--no-fresh]         one development run, never counted
-//   node load/scenarios-matrix.mjs --analyse --commit <hash> [--before-fix <summary.json>]   write summary.json and RESULTS.md from the kept runs
+//   node load/scenarios-matrix.mjs --analyse --commit <hash> [--before-fix <summary.json>] [--runs <dir>] [--earlier <dir>] [--out <dir>]
+//        write summary.json and RESULTS.md from the kept runs (by default ~/gta-evidence; --runs, --earlier and --out use an
+//        unpacked archive: <runs>/r1-<scenario>/..., <earlier>/recorded/<run>.jsonl and <earlier>/repeats/<scenario>-<n>/...)
 //
 // Order: O1, O2, O3, O4, M1, M2, M3, H1, and again, so a stop part-way leaves complete rounds. Each run starts with
 // `down -v` and `up --wait` with deploy/docker-compose.downstream.yml, which holds Alibi in observe-only mode with the
@@ -17,6 +19,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { widestArmGap } from './arm-gap.mjs';
+import { extraRules } from './extra-rules.mjs';
 
 const run = promisify(execFile);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -25,10 +28,12 @@ const profileOf = (scenario) => (scenario.name === 'database-flaky' ? 'downstrea
 const filesOf = (scenario) => ['docker-compose.yml', 'docker-compose.downstream.yml', ...(scenario.name === 'database-flaky' ? ['docker-compose.downstream-flaky.yml'] : [])].flatMap((f) => ['-f', join(ROOT, 'deploy', f)]);
 const GUARD = process.env.ALIBI_URL ?? 'http://127.0.0.1:4319';
 const FLAGSMITH = process.env.FLAGSMITH_URL ?? 'http://127.0.0.1:8000';
-const EVIDENCE = join(homedir(), 'gta-evidence', 'scenarios');
-const EARLIER_EVIDENCE = join(homedir(), 'gta-evidence', 'repeats');
+// Where the kept runs are. --runs, --earlier and --out point the analysis at an unpacked archive and another output folder.
+let EVIDENCE = join(homedir(), 'gta-evidence', 'scenarios');
+let EARLIER_EVIDENCE = join(homedir(), 'gta-evidence', 'repeats');
+let RECORDED = join(ROOT, 'runs');
 const PROGRESS = process.env.SCENARIOS_PROGRESS ?? '/tmp/scenarios/progress';
-const OUT = join(ROOT, 'runs', 'outage-scenarios');
+let OUT = join(ROOT, 'runs', 'outage-scenarios');
 const MAX_ATTEMPTS = 3;
 
 /** The plan's table: what was done is the truth, and the last column is what a rule has to do to be right. */
@@ -173,7 +178,30 @@ export function analyse(engine, scenario, info, text) {
     couponCarts: info.outcome?.couponCarts ?? 0,
     couponCartsNewCheckout: info.outcome?.couponCartsNewCheckout ?? 0,
     voidReason: voidReason(scenario, info, lines) ?? null,
+    ...addedRules(result.events, scenario, startedAtMs, {}),
+    ...flagsmithNumbers(lines),
   };
+}
+
+/** The two rules of ADDENDUM.md, added after the runs: when each acted by the engine's clock, and whether that was right. */
+function addedRules(events, scenario, startedAtMs, options) {
+  const { excessAtMs, cumulativeAtMs } = extraRules(events, options);
+  return {
+    excessRuleActed: excessAtMs !== null,
+    excessRuleAtS: sec(excessAtMs, startedAtMs),
+    excessRuleRight: (excessAtMs !== null) === scenario.shouldAct,
+    cumulativeRuleActed: cumulativeAtMs !== null,
+    cumulativeRuleAtS: sec(cumulativeAtMs, startedAtMs),
+    cumulativeRuleRight: (cumulativeAtMs !== null) === scenario.shouldAct,
+  };
+}
+
+/** What Flagsmith's own experiment numbers said, when the recording holds a read of them (an observe-only run that crossed does not). */
+function flagsmithNumbers(lines) {
+  const line = [...lines].reverse().find((l) => l.kind === 'flagsmith' && l.what === 'results' && l.ok && l.data);
+  const v2 = line?.data?.variations?.find((v) => v.variation !== 'stable');
+  const completed = v2?.metrics?.find((m) => m.name === 'checkout_completed');
+  return { flagsmithResultsRead: Boolean(line), flagsmithChanceToWinCompleted: completed?.chanceToWin ?? null };
 }
 
 /** The 18 earlier runs, scored after the fact by the same definition: right is what the plan's last column says. */
@@ -201,9 +229,10 @@ function scoreEarlier(engine) {
       rule20Right: gap >= 20 === shouldAct,
       rule10AtS: sec(withMargin(engine, lines, 10).state.armRuleTrippedAtMs, header.startedAtMs),
       plainRuleAtS: sec(result.state.plainRuleTrippedAtMs, header.startedAtMs),
+      ...addedRules(result.events, { shouldAct }, header.startedAtMs, { untilMs: off ?? Infinity }),
     });
   };
-  for (const name of ['outage', 'coupon-bug', 'slow-host']) one(`runs/${name}.jsonl`, name, join(ROOT, 'runs', `${name}.jsonl`));
+  for (const name of ['outage', 'coupon-bug', 'slow-host']) one(`runs/${name}.jsonl`, name, join(RECORDED, `${name}.jsonl`));
   const names = { outage: 'outage', 'coupon-bug': 'coupon-bug', 'degraded-host': 'slow-host' };
   for (const scenario of ['outage', 'coupon-bug', 'degraded-host']) {
     for (let n = 1; n <= 5; n++) {
@@ -328,8 +357,43 @@ export function resultsMarkdown(counted, voids, earlier, meta) {
     const x = totals(rows);
     out.push(`- ${name} (${rows.length} runs): Alibi ${x.alibi.right} right, ${x.alibi.wrong} wrong; 20-point rule ${x.rule20.right} right, ${x.rule20.wrong} wrong.`);
   }
-  out.push('');
+  out.push(...addedSection(counted, earlier), '');
   return out.join('\n');
+}
+
+/** The section for ADDENDUM.md: two rules defined after the runs, with their per-run results and totals. */
+function addedSection(counted, earlier) {
+  const out = [
+    '',
+    '## Two more rules, added after the runs',
+    '',
+    'Defined in `ADDENDUM.md` after the 24 counted runs were scored and before these rules were computed on them. Neither reads a trace and neither has a window; both look at every request from the start of the run. **Excess failures** acts the first time the failed flag-on requests exceed the failed stable requests by more than 15. **Cumulative test** acts the first time, with at least 20 completed requests in each version, a one-sided two-proportion z-test of "the flag-on failure rate is higher" over all requests so far gives p below 0.001. Scored as the plan scores.',
+    '',
+    '| Run | Scenario | Truth | Excess failures acted | Cumulative test acted | Excess failures | Cumulative test |',
+    '|---|---|---|---|---|---|---|',
+  ];
+  for (const r of counted) {
+    out.push(`| ${r.id}-${r.round} | ${r.scenario} | ${r.truth} | ${r.excessRuleActed ? t(r.excessRuleAtS) : 'no'} | ${r.cumulativeRuleActed ? t(r.cumulativeRuleAtS) : 'no'} | ${verdictWord(r.excessRuleRight)} | ${verdictWord(r.cumulativeRuleRight)} |`);
+  }
+  const tally = (rows, key) => rows.filter((r) => r[key]).length;
+  const rules = [['Alibi', 'alibiRight'], ['20-point rule', 'rule20Right'], ['Excess failures (added after the runs)', 'excessRuleRight'], ['Cumulative test (added after the runs)', 'cumulativeRuleRight']];
+  out.push('', '### Totals, right out of 24, and by scenario (out of 3)', '', `| Rule | All 24 | ${SCENARIOS.map((s) => s.id).join(' | ')} |`, `|---|---|${SCENARIOS.map(() => '---').join('|')}|`);
+  for (const [label, key] of rules) {
+    out.push(`| ${label} | ${tally(counted, key)} | ${SCENARIOS.map((s) => tally(counted.filter((r) => r.scenario === s.name), key)).join(' | ')} |`);
+  }
+  out.push('', '### The same two rules on the 18 earlier runs', '', 'Scored after the fact as above, over the requests before Alibi\'s switch-off (the whole run when it did not switch off).', '', '| Run | Truth | Alibi acted | Excess failures acted | Cumulative test acted | Excess failures | Cumulative test |', '|---|---|---|---|---|---|---|');
+  for (const r of earlier) {
+    out.push(`| ${r.run} | ${r.truth} | ${r.alibiActed ? t(r.alibiAtS) : 'no'} | ${r.excessRuleActed ? t(r.excessRuleAtS) : 'no'} | ${r.cumulativeRuleActed ? t(r.cumulativeRuleAtS) : 'no'} | ${verdictWord(r.excessRuleRight)} | ${verdictWord(r.cumulativeRuleRight)} |`);
+  }
+  out.push('', `Totals over the 18 earlier runs, right: Alibi ${tally(earlier, 'alibiRight')}, 20-point rule ${tally(earlier, 'rule20Right')}, excess failures ${tally(earlier, 'excessRuleRight')}, cumulative test ${tally(earlier, 'cumulativeRuleRight')}.`);
+  const read = counted.filter((r) => r.flagsmithResultsRead);
+  out.push('', '### What Flagsmith\'s own experiment numbers said', '');
+  if (read.length === 0) out.push('No run in observe mode read Flagsmith\'s experiment numbers.');
+  else {
+    out.push('Read at the end of the run, when Alibi had not crossed its threshold (a run in which it had holds no read). Chance that the new checkout beats the stable one on completed checkouts, as Flagsmith reports it:', '', '| Run | Scenario | Chance to win, completed checkouts |', '|---|---|---|');
+    for (const r of read) out.push(`| ${r.id}-${r.round} | ${r.scenario} | ${r.flagsmithChanceToWinCompleted === null ? 'not given' : r.flagsmithChanceToWinCompleted.toFixed(4)} |`);
+  }
+  return out;
 }
 
 /** Reads every kept run, takes the first three non-void runs of each scenario in the order they were made, and writes the files. */
@@ -372,6 +436,12 @@ function writeAnalysis(engine, meta) {
 
 async function main() {
   const engine = await loadEngine();
+  if (args.runs) EVIDENCE = resolve(args.runs);
+  if (args.earlier) {
+    RECORDED = join(resolve(args.earlier), 'recorded');
+    EARLIER_EVIDENCE = join(resolve(args.earlier), 'repeats');
+  }
+  if (args.out) OUT = resolve(args.out);
   formatRelative = engine.formatRelative;
   if (args.analyse) {
     const beforeFix = args['before-fix'] ? JSON.parse(readFileSync(resolve(args['before-fix']), 'utf8')) : undefined;

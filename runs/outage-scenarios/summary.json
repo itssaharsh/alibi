@@ -39,6 +39,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": false,
+      "excessRuleAtS": null,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 0.3907912860398074,
       "round": 1
     },
     {
@@ -84,6 +92,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": true,
+      "excessRuleAtS": 108,
+      "excessRuleRight": false,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 101.826,
+      "cumulativeRuleRight": false,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 5.376588063654708e-12,
       "round": 1
     },
     {
@@ -123,6 +139,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": false,
+      "excessRuleAtS": null,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 0.2520664928238364,
       "round": 1
     },
     {
@@ -163,6 +187,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": false,
+      "excessRuleAtS": null,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 0.24108917682897846,
       "round": 1
     },
     {
@@ -204,6 +236,14 @@
       "couponCarts": 123,
       "couponCartsNewCheckout": 72,
       "voidReason": null,
+      "excessRuleActed": true,
+      "excessRuleAtS": 129.834,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 307.929,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": false,
+      "flagsmithChanceToWinCompleted": null,
       "round": 1
     },
     {
@@ -245,6 +285,14 @@
       "couponCarts": 122,
       "couponCartsNewCheckout": 50,
       "voidReason": null,
+      "excessRuleActed": true,
+      "excessRuleAtS": 387.989,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": false,
+      "flagsmithResultsRead": false,
+      "flagsmithChanceToWinCompleted": null,
       "round": 1
     },
     {
@@ -273,6 +321,14 @@
       "couponCarts": 49,
       "couponCartsNewCheckout": 33,
       "voidReason": null,
+      "excessRuleActed": true,
+      "excessRuleAtS": 337.963,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 234,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": false,
+      "flagsmithChanceToWinCompleted": null,
       "round": 1
     },
     {
@@ -299,6 +355,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": false,
+      "excessRuleAtS": null,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 0.5,
       "round": 1
     },
     {
@@ -339,6 +403,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": false,
+      "excessRuleAtS": null,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 0.24904245562503424,
       "round": 2
     },
     {
@@ -384,6 +456,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": true,
+      "excessRuleAtS": 107.831,
+      "excessRuleRight": false,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 102.826,
+      "cumulativeRuleRight": false,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 4.066191827689636e-13,
       "round": 2
     },
     {
@@ -423,6 +503,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": true,
+      "excessRuleAtS": 179.829,
+      "excessRuleRight": false,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 0.8112066313703794,
       "round": 2
     },
     {
@@ -463,6 +551,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": false,
+      "excessRuleAtS": null,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 0.8879637765893041,
       "round": 2
     },
     {
@@ -504,6 +600,14 @@
       "couponCarts": 122,
       "couponCartsNewCheckout": 69,
       "voidReason": null,
+      "excessRuleActed": true,
+      "excessRuleAtS": 334.946,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": false,
+      "flagsmithResultsRead": false,
+      "flagsmithChanceToWinCompleted": null,
       "round": 2
     },
     {
@@ -545,6 +649,14 @@
       "couponCarts": 122,
       "couponCartsNewCheckout": 60,
       "voidReason": null,
+      "excessRuleActed": true,
+      "excessRuleAtS": 289.924,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": false,
+      "flagsmithResultsRead": false,
+      "flagsmithChanceToWinCompleted": null,
       "round": 2
     },
     {
@@ -573,6 +685,14 @@
       "couponCarts": 49,
       "couponCartsNewCheckout": 24,
       "voidReason": null,
+      "excessRuleActed": true,
+      "excessRuleAtS": 468.015,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 308.933,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": false,
+      "flagsmithChanceToWinCompleted": null,
       "round": 2
     },
     {
@@ -599,6 +719,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": false,
+      "excessRuleAtS": null,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 0.5,
       "round": 2
     },
     {
@@ -639,6 +767,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": false,
+      "excessRuleAtS": null,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 0.09481502921135815,
       "round": 3
     },
     {
@@ -684,6 +820,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": true,
+      "excessRuleAtS": 109.822,
+      "excessRuleRight": false,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 105.818,
+      "cumulativeRuleRight": false,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 6.672495889148422e-12,
       "round": 3
     },
     {
@@ -723,6 +867,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": false,
+      "excessRuleAtS": null,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 0.7444360672903255,
       "round": 3
     },
     {
@@ -763,6 +915,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": false,
+      "excessRuleAtS": null,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 0.669045071177397,
       "round": 3
     },
     {
@@ -804,6 +964,14 @@
       "couponCarts": 122,
       "couponCartsNewCheckout": 63,
       "voidReason": null,
+      "excessRuleActed": true,
+      "excessRuleAtS": 384.944,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": false,
+      "flagsmithResultsRead": false,
+      "flagsmithChanceToWinCompleted": null,
       "round": 3
     },
     {
@@ -845,6 +1013,14 @@
       "couponCarts": 122,
       "couponCartsNewCheckout": 68,
       "voidReason": null,
+      "excessRuleActed": true,
+      "excessRuleAtS": 128.837,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 404,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": false,
+      "flagsmithChanceToWinCompleted": null,
       "round": 3
     },
     {
@@ -873,6 +1049,14 @@
       "couponCarts": 49,
       "couponCartsNewCheckout": 25,
       "voidReason": null,
+      "excessRuleActed": true,
+      "excessRuleAtS": 505.038,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 295.919,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": false,
+      "flagsmithChanceToWinCompleted": null,
       "round": 3
     },
     {
@@ -899,6 +1083,14 @@
       "couponCarts": 0,
       "couponCartsNewCheckout": 0,
       "voidReason": null,
+      "excessRuleActed": false,
+      "excessRuleAtS": null,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true,
+      "flagsmithResultsRead": true,
+      "flagsmithChanceToWinCompleted": 0.5,
       "round": 3
     }
   ],
@@ -916,7 +1108,13 @@
       "alibiRight": true,
       "rule20Right": true,
       "rule10AtS": 82.796,
-      "plainRuleAtS": 76.793
+      "plainRuleAtS": 76.793,
+      "excessRuleActed": true,
+      "excessRuleAtS": 138.826,
+      "excessRuleRight": false,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true
     },
     {
       "run": "runs/coupon-bug.jsonl",
@@ -930,7 +1128,13 @@
       "alibiRight": true,
       "rule20Right": true,
       "rule10AtS": 118,
-      "plainRuleAtS": 118.832
+      "plainRuleAtS": 118.832,
+      "excessRuleActed": true,
+      "excessRuleAtS": 149.85,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 133.84,
+      "cumulativeRuleRight": true
     },
     {
       "run": "runs/slow-host.jsonl",
@@ -944,7 +1148,13 @@
       "alibiRight": false,
       "rule20Right": false,
       "rule10AtS": 96.829,
-      "plainRuleAtS": 96.829
+      "plainRuleAtS": 96.829,
+      "excessRuleActed": true,
+      "excessRuleAtS": 108,
+      "excessRuleRight": false,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 104,
+      "cumulativeRuleRight": false
     },
     {
       "run": "repeat outage 1",
@@ -958,7 +1168,13 @@
       "alibiRight": true,
       "rule20Right": true,
       "rule10AtS": null,
-      "plainRuleAtS": 71.786
+      "plainRuleAtS": 71.786,
+      "excessRuleActed": false,
+      "excessRuleAtS": null,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true
     },
     {
       "run": "repeat outage 2",
@@ -972,7 +1188,13 @@
       "alibiRight": true,
       "rule20Right": true,
       "rule10AtS": 79.82,
-      "plainRuleAtS": 70.814
+      "plainRuleAtS": 70.814,
+      "excessRuleActed": true,
+      "excessRuleAtS": 146,
+      "excessRuleRight": false,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true
     },
     {
       "run": "repeat outage 3",
@@ -986,7 +1208,13 @@
       "alibiRight": true,
       "rule20Right": true,
       "rule10AtS": 174.864,
-      "plainRuleAtS": 72.807
+      "plainRuleAtS": 72.807,
+      "excessRuleActed": true,
+      "excessRuleAtS": 110.83,
+      "excessRuleRight": false,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true
     },
     {
       "run": "repeat outage 4",
@@ -1000,7 +1228,13 @@
       "alibiRight": true,
       "rule20Right": true,
       "rule10AtS": null,
-      "plainRuleAtS": 71.834
+      "plainRuleAtS": 71.834,
+      "excessRuleActed": false,
+      "excessRuleAtS": null,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true
     },
     {
       "run": "repeat outage 5",
@@ -1014,7 +1248,13 @@
       "alibiRight": true,
       "rule20Right": true,
       "rule10AtS": 69.816,
-      "plainRuleAtS": 69.816
+      "plainRuleAtS": 69.816,
+      "excessRuleActed": true,
+      "excessRuleAtS": 91.827,
+      "excessRuleRight": false,
+      "cumulativeRuleActed": false,
+      "cumulativeRuleAtS": null,
+      "cumulativeRuleRight": true
     },
     {
       "run": "repeat coupon-bug 1",
@@ -1028,7 +1268,13 @@
       "alibiRight": true,
       "rule20Right": true,
       "rule10AtS": 115.841,
-      "plainRuleAtS": 115.841
+      "plainRuleAtS": 115.841,
+      "excessRuleActed": true,
+      "excessRuleAtS": 149.861,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 120.844,
+      "cumulativeRuleRight": true
     },
     {
       "run": "repeat coupon-bug 2",
@@ -1042,7 +1288,13 @@
       "alibiRight": true,
       "rule20Right": true,
       "rule10AtS": 115.844,
-      "plainRuleAtS": 115.844
+      "plainRuleAtS": 115.844,
+      "excessRuleActed": true,
+      "excessRuleAtS": 161.872,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 129.853,
+      "cumulativeRuleRight": true
     },
     {
       "run": "repeat coupon-bug 3",
@@ -1056,7 +1308,13 @@
       "alibiRight": true,
       "rule20Right": true,
       "rule10AtS": 118,
-      "plainRuleAtS": 118
+      "plainRuleAtS": 118,
+      "excessRuleActed": true,
+      "excessRuleAtS": 156.858,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 130.844,
+      "cumulativeRuleRight": true
     },
     {
       "run": "repeat coupon-bug 4",
@@ -1070,7 +1328,13 @@
       "alibiRight": true,
       "rule20Right": true,
       "rule10AtS": 108.82,
-      "plainRuleAtS": 108.82
+      "plainRuleAtS": 108.82,
+      "excessRuleActed": true,
+      "excessRuleAtS": 141,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 126.829,
+      "cumulativeRuleRight": true
     },
     {
       "run": "repeat coupon-bug 5",
@@ -1084,7 +1348,13 @@
       "alibiRight": true,
       "rule20Right": true,
       "rule10AtS": 119,
-      "plainRuleAtS": 122.833
+      "plainRuleAtS": 122.833,
+      "excessRuleActed": true,
+      "excessRuleAtS": 160.852,
+      "excessRuleRight": true,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 131.838,
+      "cumulativeRuleRight": true
     },
     {
       "run": "repeat degraded-host 1",
@@ -1098,7 +1368,13 @@
       "alibiRight": false,
       "rule20Right": false,
       "rule10AtS": 103,
-      "plainRuleAtS": 103
+      "plainRuleAtS": 103,
+      "excessRuleActed": true,
+      "excessRuleAtS": 110.812,
+      "excessRuleRight": false,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 106,
+      "cumulativeRuleRight": false
     },
     {
       "run": "repeat degraded-host 2",
@@ -1112,7 +1388,13 @@
       "alibiRight": false,
       "rule20Right": false,
       "rule10AtS": 100,
-      "plainRuleAtS": 100
+      "plainRuleAtS": 100,
+      "excessRuleActed": true,
+      "excessRuleAtS": 109.668,
+      "excessRuleRight": false,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 106,
+      "cumulativeRuleRight": false
     },
     {
       "run": "repeat degraded-host 3",
@@ -1126,7 +1408,13 @@
       "alibiRight": false,
       "rule20Right": false,
       "rule10AtS": 97.827,
-      "plainRuleAtS": 97.827
+      "plainRuleAtS": 97.827,
+      "excessRuleActed": true,
+      "excessRuleAtS": 109,
+      "excessRuleRight": false,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 99.827,
+      "cumulativeRuleRight": false
     },
     {
       "run": "repeat degraded-host 4",
@@ -1140,7 +1428,13 @@
       "alibiRight": false,
       "rule20Right": false,
       "rule10AtS": 98.837,
-      "plainRuleAtS": 100.839
+      "plainRuleAtS": 100.839,
+      "excessRuleActed": true,
+      "excessRuleAtS": 110,
+      "excessRuleRight": false,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 106,
+      "cumulativeRuleRight": false
     },
     {
       "run": "repeat degraded-host 5",
@@ -1154,7 +1448,13 @@
       "alibiRight": false,
       "rule20Right": false,
       "rule10AtS": 98,
-      "plainRuleAtS": 98
+      "plainRuleAtS": 98,
+      "excessRuleActed": true,
+      "excessRuleAtS": 110,
+      "excessRuleRight": false,
+      "cumulativeRuleActed": true,
+      "cumulativeRuleAtS": 104.843,
+      "cumulativeRuleRight": false
     }
   ]
 }

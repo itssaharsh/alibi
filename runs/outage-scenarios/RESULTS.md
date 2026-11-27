@@ -129,3 +129,92 @@ Totals over 18 earlier runs: Alibi 12 right, 6 wrong; 20-point rule 12 right, 6 
 - outage (6 runs): Alibi 6 right, 0 wrong; 20-point rule 6 right, 0 wrong.
 - coupon-bug (6 runs): Alibi 6 right, 0 wrong; 20-point rule 6 right, 0 wrong.
 - slow-host (6 runs): Alibi 0 right, 6 wrong; 20-point rule 0 right, 6 wrong.
+
+## Two more rules, added after the runs
+
+Defined in `ADDENDUM.md` after the 24 counted runs were scored and before these rules were computed on them. Neither reads a trace and neither has a window; both look at every request from the start of the run. **Excess failures** acts the first time the failed flag-on requests exceed the failed stable requests by more than 15. **Cumulative test** acts the first time, with at least 20 completed requests in each version, a one-sided two-proportion z-test of "the flag-on failure rate is higher" over all requests so far gives p below 0.001. Scored as the plan scores.
+
+| Run | Scenario | Truth | Excess failures acted | Cumulative test acted | Excess failures | Cumulative test |
+|---|---|---|---|---|---|---|
+| O1-1 | shared-service-outage | infrastructure | no | no | right | right |
+| O2-1 | feature-service-outage | infrastructure | +01:48 | +01:41 | wrong | wrong |
+| O3-1 | database-flaky | infrastructure | no | no | right | right |
+| O4-1 | shared-service-outage-low-traffic | infrastructure | no | no | right | right |
+| M1-1 | database-outage-with-bug | flagged path (and infrastructure) | +02:09 | +05:07 | right | right |
+| M2-1 | shared-service-outage-with-bug | flagged path (and infrastructure) | +06:27 | no | right | wrong |
+| M3-1 | rare-bug | flagged path | +05:37 | +03:54 | right | right |
+| H1-1 | healthy | healthy | no | no | right | right |
+| O1-2 | shared-service-outage | infrastructure | no | no | right | right |
+| O2-2 | feature-service-outage | infrastructure | +01:47 | +01:42 | wrong | wrong |
+| O3-2 | database-flaky | infrastructure | +02:59 | no | wrong | right |
+| O4-2 | shared-service-outage-low-traffic | infrastructure | no | no | right | right |
+| M1-2 | database-outage-with-bug | flagged path (and infrastructure) | +05:34 | no | right | wrong |
+| M2-2 | shared-service-outage-with-bug | flagged path (and infrastructure) | +04:49 | no | right | wrong |
+| M3-2 | rare-bug | flagged path | +07:48 | +05:08 | right | right |
+| H1-2 | healthy | healthy | no | no | right | right |
+| O1-3 | shared-service-outage | infrastructure | no | no | right | right |
+| O2-3 | feature-service-outage | infrastructure | +01:49 | +01:45 | wrong | wrong |
+| O3-3 | database-flaky | infrastructure | no | no | right | right |
+| O4-3 | shared-service-outage-low-traffic | infrastructure | no | no | right | right |
+| M1-3 | database-outage-with-bug | flagged path (and infrastructure) | +06:24 | no | right | wrong |
+| M2-3 | shared-service-outage-with-bug | flagged path (and infrastructure) | +02:08 | +06:44 | right | right |
+| M3-3 | rare-bug | flagged path | +08:25 | +04:55 | right | right |
+| H1-3 | healthy | healthy | no | no | right | right |
+
+### Totals, right out of 24, and by scenario (out of 3)
+
+| Rule | All 24 | O1 | O2 | O3 | O4 | M1 | M2 | M3 | H1 |
+|---|---|---|---|---|---|---|---|---|---|
+| Alibi | 24 | 3 | 3 | 3 | 3 | 3 | 3 | 3 | 3 |
+| 20-point rule | 17 | 3 | 0 | 3 | 2 | 3 | 3 | 0 | 3 |
+| Excess failures (added after the runs) | 20 | 3 | 0 | 2 | 3 | 3 | 3 | 3 | 3 |
+| Cumulative test (added after the runs) | 17 | 3 | 0 | 3 | 3 | 1 | 1 | 3 | 3 |
+
+### The same two rules on the 18 earlier runs
+
+Scored after the fact as above, over the requests before Alibi's switch-off (the whole run when it did not switch off).
+
+| Run | Truth | Alibi acted | Excess failures acted | Cumulative test acted | Excess failures | Cumulative test |
+|---|---|---|---|---|---|---|
+| runs/outage.jsonl | infrastructure | no | +02:18 | no | wrong | right |
+| runs/coupon-bug.jsonl | flagged path | +02:30 | +02:29 | +02:13 | right | right |
+| runs/slow-host.jsonl | infrastructure (the host) | +01:48 | +01:48 | +01:44 | wrong | wrong |
+| repeat outage 1 | infrastructure | no | no | no | right | right |
+| repeat outage 2 | infrastructure | no | +02:26 | no | wrong | right |
+| repeat outage 3 | infrastructure | no | +01:50 | no | wrong | right |
+| repeat outage 4 | infrastructure | no | no | no | right | right |
+| repeat outage 5 | infrastructure | no | +01:31 | no | wrong | right |
+| repeat coupon-bug 1 | flagged path | +02:30 | +02:29 | +02:00 | right | right |
+| repeat coupon-bug 2 | flagged path | +02:42 | +02:41 | +02:09 | right | right |
+| repeat coupon-bug 3 | flagged path | +02:37 | +02:36 | +02:10 | right | right |
+| repeat coupon-bug 4 | flagged path | +02:21 | +02:21 | +02:06 | right | right |
+| repeat coupon-bug 5 | flagged path | +02:41 | +02:40 | +02:11 | right | right |
+| repeat degraded-host 1 | infrastructure (the host) | +01:51 | +01:50 | +01:46 | wrong | wrong |
+| repeat degraded-host 2 | infrastructure (the host) | +01:51 | +01:49 | +01:46 | wrong | wrong |
+| repeat degraded-host 3 | infrastructure (the host) | +01:49 | +01:49 | +01:39 | wrong | wrong |
+| repeat degraded-host 4 | infrastructure (the host) | +01:51 | +01:50 | +01:46 | wrong | wrong |
+| repeat degraded-host 5 | infrastructure (the host) | +01:50 | +01:50 | +01:44 | wrong | wrong |
+
+Totals over the 18 earlier runs, right: Alibi 12, 20-point rule 12, excess failures 8, cumulative test 12.
+
+### What Flagsmith's own experiment numbers said
+
+Read at the end of the run, when Alibi had not crossed its threshold (a run in which it had holds no read). Chance that the new checkout beats the stable one on completed checkouts, as Flagsmith reports it:
+
+| Run | Scenario | Chance to win, completed checkouts |
+|---|---|---|
+| O1-1 | shared-service-outage | 0.3908 |
+| O2-1 | feature-service-outage | 0.0000 |
+| O3-1 | database-flaky | 0.2521 |
+| O4-1 | shared-service-outage-low-traffic | 0.2411 |
+| H1-1 | healthy | 0.5000 |
+| O1-2 | shared-service-outage | 0.2490 |
+| O2-2 | feature-service-outage | 0.0000 |
+| O3-2 | database-flaky | 0.8112 |
+| O4-2 | shared-service-outage-low-traffic | 0.8880 |
+| H1-2 | healthy | 0.5000 |
+| O1-3 | shared-service-outage | 0.0948 |
+| O2-3 | feature-service-outage | 0.0000 |
+| O3-3 | database-flaky | 0.7444 |
+| O4-3 | shared-service-outage-low-traffic | 0.6690 |
+| H1-3 | healthy | 0.5000 |
