@@ -239,6 +239,7 @@ export function useBoard(params: Params): Controller {
         } else if (forced === 'paused') await seekTo(Math.floor(s.snapshot.endMs * 0.3));
         else if (forced === 'switching' || forced === 'unconfirmed') await seekTo((at('threshold') ?? 0) + 1);
         else if (forced === 'watching') await seekTo((at('switched-off') ?? 0) + 90_000);
+        else if (params.t !== null && params.autoplay) await playFrom(params.t);
         else if (params.t !== null) await seekTo(params.t);
         else if (params.autoplay) await playFrom(0);
       } catch {

@@ -79,3 +79,39 @@ describe('the view model reads the engine and adds nothing', () => {
     expect(wf.rows.find((r) => r.origin)?.span.name).toBe('pg.query:SELECT shop');
   });
 });
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { parseRun } from '@alibi/core';
+
+const realRun = fileURLToPath(new URL('../../../../runs/coupon-bug.jsonl', import.meta.url));
+
+describe.skipIf(!existsSync(realRun))('against the recorded coupon-bug run', () => {
+  const lines = parseRun(readFileSync(realRun, 'utf8'));
+  const r = createReplayer(lines);
+  const events = r.step(Infinity);
+  const snap = snapshotOf(r, events, true, r.endsAtMs - r.header.startedAtMs);
+  const counted = snap.newTags.filter((t) => t.counted);
+
+  it('counts 16 failures on the flagged path and labels it "probably the feature"', () => {
+    expect(snap.state.counted).toBe(16);
+    expect(snap.state.label).toBe('probably the feature');
+    expect(counted.length).toBeGreaterThanOrEqual(16);
+    expect(counted[0]!.reason).toMatch(/^Failed in checkout_v2\.apply_coupon, a span on the flagged path: TypeError: Cannot read properties of undefined \(reading 'percent'\)\. Counts toward the switch-off\.$/);
+  });
+
+  it('keeps the root-to-failure path and the flagged spans, and folds middleware away', () => {
+    const tag = counted[0]!;
+    const spans = lines.flatMap((l) => (l.kind === 'spans' ? l.spans.filter((s) => s.traceId === tag.id) : []));
+    const wf = waterfallOf(spans, tag.origins, FLAGGED_PATH_ATTRIBUTE);
+    const shown = wf.rows.filter((row) => !row.quiet).map((row) => row.span.name);
+    expect(shown).toEqual(expect.arrayContaining(['POST /checkout', 'request handler - /checkout', 'checkout', 'checkout_v2', 'checkout_v2.price', 'checkout_v2.apply_coupon']));
+    expect(shown.some((n) => n.startsWith('middleware - '))).toBe(false);
+    expect(wf.rows.length).toBeGreaterThan(shown.length);
+  });
+
+  it('carries the recorded switch-off answer and the world lines through to the record', () => {
+    expect(snap.newMoments.find((m) => m.key === 'switched-off')?.detail).toBe('checkout_v2 rollout set to 0% in Flagsmith; 20 of 20 identities checked get stable');
+    expect(snap.timeline.some((t) => t.text === 'Carts with the SAVE10 coupon began (about 1 in 5).')).toBe(true);
+  });
+});

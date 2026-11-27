@@ -15,6 +15,8 @@ export interface Selected {
   loading: boolean;
 }
 
+const isLiveRef = (source: string): boolean => source === 'live';
+
 export function App() {
   const params = useMemo(() => readParams(location.search), []);
   const ctl = useBoard(params);
@@ -27,6 +29,20 @@ export function App() {
     const tag = board.tags.find((t) => t.id === ctl.featured?.id);
     if (tag) setSelected({ id: tag.id, tag, spans: ctl.featured.spans, loading: false });
   }, [board, ctl.featured, selected.id]);
+
+  // On a live board the first counted failure is open by default.
+  useEffect(() => {
+    if (!isLiveRef(ctl.source) || !board || selected.id || board.tags.length === 0) return;
+    pick(board.tags.find((t) => t.counted) ?? board.tags[0]!);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctl.source, board?.tags.length, selected.id]);
+
+  useEffect(() => {
+    if (!params.focus || !board) return;
+    const id = window.setTimeout(() => document.getElementById(`focus-${params.focus}`)?.scrollIntoView({ block: 'start' }), 600);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Boolean(board), params.focus]);
 
   const pick = (tag: Tag): void => {
     setSelected({ id: tag.id, tag, loading: true });
@@ -45,7 +61,9 @@ export function App() {
       : ctl.source === 'live-down'
         ? `Live runs are paused. This is the ${board?.meta.title.toLowerCase() ?? ''} replay.`
         : board
-          ? `Replay of a recorded run: ${board.meta.source}`
+          ? entry?.dev
+            ? 'Development run, scripted traffic'
+            : `Replay of a recorded run: ${board.meta.source}`
           : '';
 
   return (
@@ -89,6 +107,7 @@ export function App() {
                   ))}
                 </div>
               ) : null}
+              {board ? <WatchBand board={board} /> : null}
             </div>
             {board ? (
               <Board board={board} ctl={ctl} selected={selected} onPick={pick} calm={!playing || reduced} record={params.record || isLive} skeleton={skeleton} />
@@ -99,13 +118,12 @@ export function App() {
           {mode === 'failed' ? <p className="card muted">This run did not load. Pick another run above, or reload the page.</p> : null}
           {board ? (
             <>
-              <WatchBand board={board} />
-              <FailingAndTrace board={board} selected={selected} onPick={pick} />
-              <Record board={board} />
+              <div id="focus-trace"><FailingAndTrace board={board} selected={selected} onPick={pick} /></div>
+              <div id="focus-record"><Record board={board} /></div>
             </>
           ) : null}
-          <AuthorRule {...(board ? { board } : {})} />
-          <PlugIn />
+          <div id="focus-rule"><AuthorRule {...(board ? { board } : {})} /></div>
+          <div id="focus-plug"><PlugIn /></div>
         </main>
         <Footer sources={index ? index.runs.map((r) => r.source).filter((v, i, a) => a.indexOf(v) === i) : []} />
       </div>

@@ -20,6 +20,8 @@ export interface Moment {
   text: string;
   /** For `switched-off`: false when Flagsmith did not confirm. */
   confirmed?: boolean;
+  /** For `switched-off`: what Flagsmith's answer said, as recorded. */
+  detail?: string;
 }
 
 export interface TimelineLine {
@@ -57,6 +59,8 @@ export interface Board {
   moments: Moment[];
   timeline: TimelineLine[];
   record?: InvestigationRecord;
+  /** Live only: requests seen in the last second. */
+  liveRate?: { requests: number; failures: number };
 }
 
 export function tagOf(verdict: TraceVerdict, baseMs: number): Tag | undefined {
@@ -81,7 +85,7 @@ export function momentOf(event: GuardEvent, baseMs: number): Moment | undefined 
     case 'threshold-crossed':
       return { key: 'threshold', atMs, text: `The counter passes ${event.threshold}` };
     case 'switched-off':
-      return { key: 'switched-off', atMs, confirmed: event.confirmed, text: event.confirmed ? 'Switched off in Flagsmith' : 'Switch-off not confirmed' };
+      return { key: 'switched-off', atMs, confirmed: event.confirmed, detail: event.detail, text: event.confirmed ? 'Switched off in Flagsmith' : 'Switch-off not confirmed' };
     case 'recovered':
       return { key: 'recovered', atMs, text: 'Back at the stable level' };
     case 'labelled':
@@ -153,35 +157,54 @@ export function outcomeOf(board: Board): Outcome {
   return { kind: 'on', counted, failures };
 }
 
+export interface WaterfallRow {
+  span: FlatSpan;
+  depth: number;
+  origin?: OriginSpan;
+  flagged: boolean;
+  /** True for spans that are only noise by default: Express middleware and pool connects off the failing path. */
+  quiet: boolean;
+}
+
 export interface Waterfall {
-  rows: { span: FlatSpan; depth: number; origin?: OriginSpan; flagged: boolean }[];
+  rows: WaterfallRow[];
   startMs: number;
   durationMs: number;
 }
 
-/** Orders a request's spans as a tree for the waterfall. Origin spans come from the engine's verdict. */
+const isQuiet = (name: string): boolean => name.startsWith('middleware - ') || name === 'pg-pool.connect';
+
+/**
+ * Orders a request's spans as a tree for the waterfall. Origin spans come from the engine's verdict.
+ * A span is quiet when it is middleware or a pool connect that is neither on the path from the root to a
+ * failing span nor on the flagged path.
+ */
 export function waterfallOf(spans: readonly FlatSpan[], origins: readonly OriginSpan[], flaggedAttribute: string): Waterfall {
   const byParent = new Map<string | undefined, FlatSpan[]>();
   const ids = new Set(spans.map((s) => s.spanId));
+  const parentOf = new Map<string, string | undefined>();
   for (const span of spans) {
     const parent = span.parentSpanId && ids.has(span.parentSpanId) ? span.parentSpanId : undefined;
+    parentOf.set(span.spanId, parent);
     byParent.set(parent, [...(byParent.get(parent) ?? []), span]);
   }
+  const onPath = new Set<string>();
+  for (const origin of origins) for (let id: string | undefined = origin.spanId; id; id = parentOf.get(id)) onPath.add(id);
   const originById = new Map(origins.map((o) => [o.spanId, o]));
-  const rows: Waterfall['rows'] = [];
+  const rows: WaterfallRow[] = [];
   const walk = (parent: string | undefined, depth: number, flagged: boolean): void => {
     const kids = (byParent.get(parent) ?? []).sort((a, b) => a.startMs - b.startMs);
     for (const span of kids) {
       const here = flagged || flaggedAttribute in span.attrs;
       const origin = originById.get(span.spanId);
-      rows.push({ span, depth, flagged: here, ...(origin ? { origin } : {}) });
+      rows.push({ span, depth, flagged: here, quiet: isQuiet(span.name) && !here && !onPath.has(span.spanId), ...(origin ? { origin } : {}) });
       walk(span.spanId, depth + 1, here);
     }
   };
   walk(undefined, 0, false);
   const startMs = Math.min(...spans.map((s) => s.startMs));
   const endMs = Math.max(...spans.map((s) => s.endMs));
-  return { rows, startMs, durationMs: Math.max(1, endMs - startMs) };
+  return { rows, startMs, durationMs: Math.max(1e-6, endMs - startMs) };
 }
 
 export const percent = (rate: number): string => `${(rate * 100).toFixed(1)}%`;

@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { formatRelative, type FlatSpan } from '@alibi/core';
+import { formatRelative, stableLevelLabel, type FlatSpan } from '@alibi/core';
 import type { Board as BoardData, Tag } from '../lib/viewModel';
-import { outcomeOf, percent } from '../lib/viewModel';
+import { outcomeOf } from '../lib/viewModel';
 import type { Controller } from '../lib/useBoard';
 import { AUTHORS_RULE, COLLECTOR_CONFIG, REPO_URL, SPAN_ATTRIBUTES } from '../lib/copy';
-import { classWords, ratesLine, rel, relMs } from '../lib/format';
+import { classWords, ms, ratesLine, rel, relMs } from '../lib/format';
 import { Waterfall } from './Waterfall';
 import type { Selected } from '../App';
 
@@ -47,7 +47,7 @@ export function VerdictCard({ board, ctl, skeleton }: { board: BoardData; ctl: C
           </div>
           <div className="v-line">
             <b>failures counted against {flag}</b>
-            <span>{o.kind === 'switching' ? `The counter passed ${board.state.config.threshold}. Switching it off in Flagsmith.` : o.kind === 'labelled' || o.kind === 'off' ? `Switched off in Flagsmith at ${board.state.switchedOffAtMs !== undefined ? rel(board, board.state.switchedOffAtMs) : ''}.` : plainSentence(board)}</span>
+            <span>{o.kind === 'switching' ? `The counter passed ${board.state.config.threshold}. Switching it off in Flagsmith.` : o.kind === 'labelled' || o.kind === 'off' ? `Switched off in Flagsmith at ${board.state.switchedOffAtMs !== undefined ? rel(board, board.state.switchedOffAtMs) : ''}.` : plainSentence(board, finished)}</span>
           </div>
         </>
       )}
@@ -55,9 +55,10 @@ export function VerdictCard({ board, ctl, skeleton }: { board: BoardData; ctl: C
   );
 }
 
-function plainSentence(board: BoardData): string {
+function plainSentence(board: BoardData, finished: boolean): string {
   const t = board.state.plainRuleTrippedAtMs;
-  return t !== undefined ? `A plain error-rate rule would have switched it off at ${rel(board, t)}.` : 'A plain error-rate rule would not have switched it off.';
+  if (t !== undefined) return `A plain error-rate rule would have switched it off at ${rel(board, t)}.`;
+  return finished ? 'A plain error-rate rule would not have switched it off.' : 'A plain error-rate rule is watching the same requests.';
 }
 
 export function WatchBand({ board }: { board: BoardData }) {
@@ -66,20 +67,30 @@ export function WatchBand({ board }: { board: BoardData }) {
   const abs = board.meta.startedAtMs + board.nowMs;
   const total = state.watchEndsAtMs - state.switchedOffAtMs;
   const done = Math.max(0, Math.min(1, (abs - state.switchedOffAtMs) / total));
+  const left = Math.max(0, Math.ceil((state.watchEndsAtMs - abs) / 1000));
   const minutes = state.config.watchMs / 60000;
   const recovered = state.recoveredAtMs !== undefined;
+  const answer = board.moments.find((m) => m.key === 'switched-off' && m.confirmed)?.detail;
   let line = `Watching for ${minutes} minutes.`;
   if (recovered) line = `Error rate and speed are back at the stable version's level at ${rel(board, state.recoveredAtMs as number)}.`;
   else if (state.label) line = `Still above the stable version's level after ${minutes} minutes.`;
   return (
     <section className="card watch" aria-label="The watch after the switch-off">
-      <h2>The {minutes}-minute watch</h2>
+      <div className="rec-head">
+        <h2>The {minutes}-minute watch</h2>
+        {state.label ? null : <span className="countdown" role="timer" aria-label="Time left in the watch">{Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')} left</span>}
+      </div>
       <div className="meter" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(done * 100)} aria-label="Watch progress">
         <span style={{ width: `${done * 100}%` }} />
         {recovered ? <i style={{ left: `${(((state.recoveredAtMs as number) - state.switchedOffAtMs) / total) * 100}%` }} title="Back at the stable level" /> : null}
       </div>
       <p className="w-line">{line}</p>
-      {state.stableBaseline ? <p className="muted small">Stable version before the switch-off: {ratesLine(state.stableBaseline)}.</p> : null}
+      {answer ? <p className="muted small">Flagsmith: {answer}.</p> : null}
+      {state.stableBaseline ? (
+        <p className="muted small">
+          {stableLevelLabel(state.stableBaselineWindow)}: {ratesLine(state.stableBaseline)}.
+        </p>
+      ) : null}
       {board.record ? <p className="muted small">After the switch-off: {ratesLine(board.record.afterSwitchOff)}.</p> : null}
     </section>
   );
@@ -134,7 +145,7 @@ export function FailingAndTrace({ board, selected, onPick }: { board: BoardData;
         {selected.tag ? (
           <>
             <p className="muted small">
-              {selected.tag.id.slice(0, 8)} on {selected.tag.route}, {Math.round(selected.tag.durationMs)} ms
+              {selected.tag.id.slice(0, 8)} on {selected.tag.route}, {ms(selected.tag.durationMs)}
             </p>
             <Waterfall spans={selected.spans} loading={selected.loading} origins={selected.tag.origins} />
             <p className="reason">{selected.tag.reason}</p>
@@ -183,9 +194,10 @@ export function Record({ board }: { board: BoardData }) {
                   <ul>
                     {v.metrics.map((m) => (
                       <li key={m.name}>
-                        {m.name.replace(/_/g, ' ')}: {Number.isInteger(m.value) ? m.value : m.value.toFixed(3)}
-                        {m.lift !== undefined ? `, lift ${percent(m.lift)}` : ''}
-                        {m.chanceToWin !== undefined ? `, chance to win ${percent(m.chanceToWin)}` : ''}
+                        {m.name.replace(/_/g, ' ')}: {m.value}
+                        {m.lift !== undefined ? `, lift ${m.lift}` : ''}
+                        {m.chanceToWin !== undefined ? `, chance to win ${m.chanceToWin}` : ''}
+                        {m.interval ? `, interval ${m.interval[0]} to ${m.interval[1]}` : ''}
                       </li>
                     ))}
                   </ul>
@@ -222,10 +234,10 @@ export function Record({ board }: { board: BoardData }) {
                 </td>
                 <td>{b.flagOn.requests}</td>
                 <td>{b.flagOn.failures}</td>
-                <td>{Math.round(b.flagOn.p95Ms)} ms</td>
+                <td>{ms(b.flagOn.p95Ms)}</td>
                 <td>{b.stable.requests}</td>
                 <td>{b.stable.failures}</td>
-                <td>{Math.round(b.stable.p95Ms)} ms</td>
+                <td>{ms(b.stable.p95Ms)}</td>
                 <td className="why left">{b.why}</td>
               </tr>
             ))}

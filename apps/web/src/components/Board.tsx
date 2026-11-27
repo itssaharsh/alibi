@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Board as BoardData, Tag } from '../lib/viewModel';
 import type { Controller } from '../lib/useBoard';
-import { relMs } from '../lib/format';
+import { ms, relMs } from '../lib/format';
 import { Waterfall } from './Waterfall';
 import { Controls } from './Controls';
 import type { Selected } from '../App';
@@ -57,7 +57,7 @@ export function Board({ board, ctl, selected, onPick, calm, record, skeleton }: 
   }, [ctl.warm]);
 
   const flagLabel = off
-    ? 'is off in Flagsmith'
+    ? 'is off for everyone in Flagsmith'
     : state.phase === 'switching-off'
       ? ctl.board?.moments.some((m) => m.key === 'switched-off' && m.confirmed === false)
         ? 'switch-off not confirmed, retrying in Flagsmith'
@@ -75,8 +75,12 @@ export function Board({ board, ctl, selected, onPick, calm, record, skeleton }: 
           </span>
         </div>
         <span className="muted small" role="status">
-          {board.meta.title}, {runState.toLowerCase()}
-          {board.meta.name === 'live' ? '' : ` at ${relMs(board.nowMs)}`}
+          {board.meta.title}, {board.meta.name === 'live' ? 'live' : runState.toLowerCase()}
+          {board.meta.name === 'live'
+            ? board.liveRate
+              ? `, ${board.liveRate.requests} requests in the last second`
+              : ''
+            : ` at ${relMs(board.nowMs)}`}
         </span>
       </div>
       <div className="lanes">
@@ -99,7 +103,7 @@ export function Board({ board, ctl, selected, onPick, calm, record, skeleton }: 
                 </div>
               );
             })}
-            {counted.length > threshold + 1 ? <span className="more">+{counted.length - threshold - 1} more</span> : null}
+            {counted.length > threshold + 1 ? <span className="more" title="Failures on the flagged path after the switch-off was requested">+{counted.length - threshold - 1} more</span> : null}
           </div>
         </div>
         <div className="lane right">
@@ -119,7 +123,7 @@ export function Board({ board, ctl, selected, onPick, calm, record, skeleton }: 
         {selected.tag ? (
           <>
             <div className="mh">
-              <b>Request {selected.tag.id.slice(0, 8)}</b> on {selected.tag.route}, {Math.round(selected.tag.durationMs)} ms
+              <b>Request {selected.tag.id.slice(0, 8)}</b> on {selected.tag.route}, {ms(selected.tag.durationMs)}
             </div>
             <Waterfall compact spans={selected.spans} loading={selected.loading} origins={selected.tag.origins} />
             <p className="mw">{selected.tag.reason}</p>

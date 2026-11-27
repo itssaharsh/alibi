@@ -1,5 +1,5 @@
-import { formatRelative, type FailureClass, type Rates } from '@alibi/core';
-import { percent, type Board } from './viewModel';
+import { describeLevel, formatMs, formatRelative, type FailureClass, type Rates } from '@alibi/core';
+import type { Board } from './viewModel';
 
 export const rel = (board: Board, absMs: number): string => formatRelative(absMs - board.meta.startedAtMs);
 export const relMs = (ms: number): string => formatRelative(ms);
@@ -12,7 +12,9 @@ export const classWords: Record<FailureClass, string> = {
   mixed: 'dependency and server',
 };
 
-export const ratesLine = (r: Rates): string => `${percent(r.errorRate)} errors, p95 ${Math.round(r.p95Ms)} ms, ${r.requests} requests`;
+/** Durations and levels are written by the engine, never rounded here. */
+export const ms = formatMs;
+export const ratesLine = (r: Rates): string => describeLevel(r);
 
 /** The plain rule's side of the story, from the engine's state. */
 export function plainRuleLine(board: Board, finished: boolean): string {

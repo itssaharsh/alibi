@@ -12,6 +12,8 @@ export interface Params {
   autoplay: boolean;
   live: string | null;
   speed: number | null;
+  /** Scrolls a section into view on load: `trace`, `record`, `rule`, `plug`. For video capture. */
+  focus: string | null;
 }
 
 export function readParams(search: string): Params {
@@ -26,5 +28,6 @@ export function readParams(search: string): Params {
     autoplay: q.get('autoplay') === '1',
     live: q.get('live'),
     speed: Number(q.get('speed')) > 0 ? Number(q.get('speed')) : null,
+    focus: q.get('focus'),
   };
 }

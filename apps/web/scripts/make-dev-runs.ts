@@ -15,7 +15,8 @@ export const devDir = join(here, '..', '.dev-runs');
 const FILES: Record<RunName, { file: string; title: string }> = {
   outage: { file: 'outage', title: 'The database outage' },
   'feature-bug': { file: 'coupon-bug', title: 'The coupon bug' },
-  'degraded-host': { file: 'slow-host', title: 'The slow host' },
+  'degraded-host': { file: 'degraded-host', title: 'The degraded host' },
+  'slow-host': { file: 'slow-host', title: 'The slow host' },
 };
 
 function experiment(lines: RunLine[], readAtMs: number): FlagsmithExperimentSummary {
