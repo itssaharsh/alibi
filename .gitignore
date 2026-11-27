@@ -1,59 +1,33 @@
-# local planning and agent state, never part of the judged repository
+# local planning, agent state and working notes (kept on the author's machine)
 hackathon-idea/
 .claude/
+/PROJECT_MEMORY.md
+/TASKS.md
+/AGENTS.md
+/CLAUDE.md
+/PROMPTS.md
+/.prod-build/
+/docs/memory/
+/prod-idea/
+/prod-ui/
+
+# design working files, QA screenshots and video working files
+/design/
+/UI-SPEC.md
+/qa/
+/video/
+
 # secrets and local environment
 .env
 .env.*
 !.env.example
 *.pem
+storage-state*.json
+storage_state*.json
+*.storage-state.json
+
 # build output
 node_modules/
 dist/
 .venv/
 __pycache__/
-# prod-build: planning notes stay out of a judged repository
-hackathon-idea/
-prod-idea/
-notes/hackathon-idea/
-judging-intel*.md
-judging-notes*.md
-judge-notes*.md
-idea-package*.md
-idea_package*.md
-SUBMISSION.md
-submission.md
-SHOOT.md
-SCRIPT.md
-PITCH.md
-PITCH-NOTES.md
-DEMO-SCRIPT.md
-VIDEO-SCRIPT.md
-video-script.md
-# browser session files hold live sign-in cookies
-storage-state*.json
-storage_state*.json
-*.storage-state.json
-# prod-build: a post draft and a first user's material stay out of the repository
-/post.md
-/post-draft.md
-/devto-post.md
-/first-user/
-# prod-build: the build's own files stay on this machine at an event
-/.prod-build/
-/AGENTS.md
-/CLAUDE.md
-/PROMPTS.md
-/docs/memory/
-
-# working notes for the builder and his agents, kept on this machine
-/PROJECT_MEMORY.md
-/TASKS.md
-
-# design working files: references, concept mocks, the UI spec and QA screenshots
-/design/
-/UI-SPEC.md
-/prod-ui/
-/qa/
-
-# demo video working files (the published video is served from the page)
-/video/
