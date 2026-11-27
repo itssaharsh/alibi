@@ -123,7 +123,8 @@ export function createGuardServer(service: AlibiService, config: ServiceConfig, 
       }
       res.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
     };
-    const snapshot = (): void => write('state', service.state({ recent: false }));
+    // every message carries its `type`, as the page's live adapter reads it
+    const snapshot = (): void => write('state', { type: 'state', ...service.state({ recent: false }) });
     snapshot();
     const unsubscribe = service.subscribe((event: StreamEvent) => write(event.type, event));
     const state = setInterval(snapshot, SSE_STATE_MS);

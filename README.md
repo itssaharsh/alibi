@@ -64,6 +64,60 @@ Summary
 
 The output above is shortened where it says so. The page and the command run the same engine on the same recorded spans. Only Flagsmith's answers are replayed from the recording.
 
+## Quickstart: run it yourself
+
+You need Docker with Compose, and Node 22 for the load script. Nothing else is installed on your machine; everything else runs in containers.
+
+```bash
+git clone https://github.com/itssaharsh/alibi && cd alibi
+docker compose -f deploy/docker-compose.yml up -d --build --wait
+node load/run.mjs coupon-bug
+```
+
+The first command builds and starts the whole example: self-hosted Flagsmith (it creates the flag, the experiment and its three metrics for you), a small shop, the OpenTelemetry Collector, Jaeger, Alibi and the live board. On our test machine it took about 3 minutes with the images already pulled; a first pull of the images takes longer. It returns when everything reports healthy.
+
+The second command sends two shop requests a second for 9 minutes. Open the board while it runs: **http://127.0.0.1:4173**. This is what you will see:
+
+| Time | What happens |
+|---|---|
+| 0:00 | Healthy traffic. About half of the shoppers get `v2`, the new checkout. |
+| 1:30 | Carts with a coupon begin to crash inside `checkout_v2.apply_coupon`. The board's counter starts to climb. |
+| about 2:30 | The counter passes 15. Alibi sets the experiment's rollout to 0% in Flagsmith, checks that 20 of 20 identities now get `stable`, and the board says **switched off**. |
+| about 3:30 | Error rate and latency are back at the stable version's level over a full minute. |
+| about 7:30 | The five-minute watch ends. The label appears: **probably the feature**, with the investigation record and Flagsmith's own numbers. |
+
+The command prints a summary when it ends. The recording of the run is written inside the Alibi container; copy it out with `docker compose -f deploy/docker-compose.yml cp alibi:/data/runs/coupon-bug.jsonl .` and replay it with the command in the section above.
+
+### The local addresses
+
+| What | Address |
+|---|---|
+| The live board (add `?live=` to the address to see the three recorded runs instead) | http://127.0.0.1:4173 |
+| Flagsmith | http://127.0.0.1:8000 |
+| Jaeger, for the traces | http://127.0.0.1:16686 |
+| Alibi's own state, as JSON | http://127.0.0.1:4319/api/state |
+
+**Flagsmith login.** The email is `admin@alibi.example`. The password is generated on your machine, the first time you start the stack: it is the `ADMIN_PASSWORD` line in `deploy/data/shared/secrets.env`. To see the experiment, open the organisation Alibi, the project `shop`, the environment `Development`, then **Experiments** and `checkout_v2 rollout`. After the switch-off, "Current rollout" there reads 0%. The experiment's results table fills when its **Refresh** button is pressed or when Alibi reads them, which it does ten seconds before the watch ends. Flagsmith allows one refresh every 5 minutes, so wait for the label before you press it yourself.
+
+### The other two scenarios
+
+```bash
+node load/run.mjs outage          # 4 minutes: the shop's database is stopped for 90 seconds
+node load/run.mjs degraded-host   # 9 minutes: the shop's CPU is throttled (the "slow host" run)
+```
+
+In the outage, the board shows failures counted as dependency failures, the counter stays at 0 and the flag stays on. In `degraded-host`, the flag goes off and the label ends as **probably not the feature**. Each scenario arms Alibi itself, so you do not have to.
+
+### Between runs, and stopping
+
+`node load/run.mjs reset` puts the flag back on for half of the shoppers and removes the CPU limit. Flagsmith keeps the numbers from earlier runs, so for clean experiment numbers start from scratch instead:
+
+```bash
+docker compose -f deploy/docker-compose.yml down -v
+```
+
+That stops everything and deletes the Flagsmith and shop databases. The generated passwords stay in `deploy/data/shared` and are reused the next time. Port 4173 is for the board; if something of yours uses it, start with `ALIBI_BOARD_PORT=4174` in front of the compose command.
+
 ## The author's rule
 
 Alibi is built around a rule I wrote before any code existed. These are my words, and the engine does exactly this:
@@ -88,7 +142,7 @@ Take Flagsmith out and nothing is left. It decides who gets the feature, it is t
 |---|---|---|
 | Self-hosted Flagsmith in Docker | The whole example runs against your own Flagsmith, created and configured by a bootstrap container | `deploy/docker-compose.yml`, `deploy/bootstrap/bootstrap.sh` |
 | Multivariate flag with keyed variations | `checkout_v2` gives each shopper `stable` or `v2`. The shop reads it with a plain flag call | `apps/shop/src/flagged.js` |
-| Experimentation: exposures and metrics | Alibi turns spans into exposure events and three metric events (`checkout_completed`, `flag_path_failure`, `checkout_latency_ms`). The shop has no tracking call of its own | `packages/guard/src/forwarder.ts` |
+| Experimentation: exposures and metrics | Alibi turns spans into exposure events and three metric events (`checkout_completed`, `flag_path_failure`, `checkout_latency_ms`). The shop has no tracking call of its own | `packages/guard/src/service.ts` (the events), `packages/guard/src/forwarder.ts` (the batches) |
 | Experiment rollout, through the Admin API | The switch. Alibi sets the experiment's rollout to 0%, then evaluates 20 identities and requires every one to get `stable` before it reports the switch-off | `packages/guard/src/flagsmith.ts` |
 | Experiment results | Flagsmith's own numbers per variation go into the investigation record | the record on the live page |
 

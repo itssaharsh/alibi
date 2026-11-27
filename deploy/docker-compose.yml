@@ -160,6 +160,18 @@ services:
       bootstrap:
         condition: service_completed_successfully
 
+  board:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:${ALIBI_BOARD_PORT:-4173}:4173
+    mem_limit: 64m
+    depends_on:
+      alibi:
+        condition: service_healthy
+
   shop-db:
     image: postgres:15.5-alpine
     restart: unless-stopped

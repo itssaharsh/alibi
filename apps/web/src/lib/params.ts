@@ -16,6 +16,9 @@ export interface Params {
   focus: string | null;
 }
 
+/** Set at build time (`VITE_LIVE_SAME_ORIGIN=1`) by the compose stack, whose web server also forwards `/api/` to the guard. */
+const SAME_ORIGIN_GUARD = import.meta.env.VITE_LIVE_SAME_ORIGIN === '1';
+
 export function readParams(search: string): Params {
   const q = new URLSearchParams(search);
   const state = q.get('state');
@@ -26,7 +29,8 @@ export function readParams(search: string): Params {
     state: (FORCED_STATES as readonly string[]).includes(state ?? '') ? (state as ForcedState) : null,
     record: q.get('record') === '1',
     autoplay: q.get('autoplay') === '1',
-    live: q.get('live'),
+    // `?live=` with nothing after it turns the live board off; without the parameter the build-time default applies.
+    live: q.get('live') ?? (SAME_ORIGIN_GUARD ? location.origin : null),
     speed: Number(q.get('speed')) > 0 ? Number(q.get('speed')) : null,
     focus: q.get('focus'),
   };

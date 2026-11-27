@@ -209,7 +209,8 @@ describe('GET /api/events', () => {
         text += decoder.decode(chunk.value);
       }
     };
-    await until(/event: state\n/);
+    await until(/event: state\ndata: .*\n/);
+    expect(JSON.parse(/event: state\ndata: (.+)\n/.exec(text)?.[1] ?? '{}')).toMatchObject({ type: 'state', state: { phase: 'armed' }, run: { name: 'live' } });
     const internals = h.service as unknown as { listeners: Set<unknown> };
     expect(internals.listeners.size).toBe(1);
 

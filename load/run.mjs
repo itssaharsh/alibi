@@ -2,12 +2,13 @@
 // Drives steady shop traffic and the three scripted scenarios against the compose stack.
 // Run it on the machine that runs the stack, from the repository root:
 //
-//   node load/run.mjs <outage|coupon-bug|degraded-host> [--rps 2] [--minutes N] [--out runs/<name>.world.jsonl]
+//   node load/run.mjs <outage|coupon-bug|degraded-host> [--rps 2] [--minutes N] [--out file]
 //   (degraded-host also takes --cpus, the CPU limit it puts on the shop, default 0.05)
 //   node load/run.mjs reset
 //
-// Environment: SHOP_URL (default http://127.0.0.1:8080), ALIBI_URL (when set, every world line is also
-// posted to $ALIBI_URL/api/world, and at the end of the run $ALIBI_URL/api/finish is called so Alibi reads
+// Environment: SHOP_URL (default http://127.0.0.1:8080), ALIBI_URL (default http://127.0.0.1:4319, the guard of the
+// compose stack; set it to an empty value to run without a guard). At the start the run arms the guard with its name
+// and a recording, every world line is also posted to $ALIBI_URL/api/world, and at the end of the run $ALIBI_URL/api/finish is called so Alibi reads
 // Flagsmith's numbers and closes its recording). ALIBI_CONTROL_TOKEN, when set, is sent as a bearer token.
 import { execFile } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -22,7 +23,7 @@ const COMPOSE_FILE = join(ROOT, 'deploy', 'docker-compose.yml');
 const FLAGSMITH_JSON = join(ROOT, 'deploy', 'data', 'shared', 'flagsmith.json');
 
 const SHOP_URL = process.env.SHOP_URL ?? 'http://127.0.0.1:8080';
-const ALIBI_URL = process.env.ALIBI_URL ?? '';
+const ALIBI_URL = process.env.ALIBI_URL ?? 'http://127.0.0.1:4319';
 const SEED = 20261127;
 const IDENTITIES = 600;
 const COUPON = 'SAVE10';
@@ -96,13 +97,32 @@ async function finishAlibi() {
   }
 }
 
+/** Arms the guard for this run: a clean start, the run's name and title, and a recording named after it. */
+async function armAlibi(record) {
+  if (!ALIBI_URL) return;
+  try {
+    const res = await fetch(`${ALIBI_URL}/api/arm`, {
+      method: 'POST',
+      headers: alibiHeaders(),
+      body: JSON.stringify({ ...record, force: true }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) console.error(`Alibi did not arm for this run: HTTP ${res.status}`);
+  } catch (error) {
+    console.error(`Alibi is not reachable at ${ALIBI_URL}, so this run is not watched or recorded: ${error.message}`);
+  }
+}
+
+/** World lines go to the guard's timeline and recording; with an output path they are also written to a file. */
 function makeWorld(outPath) {
-  mkdirSync(dirname(outPath), { recursive: true });
-  writeFileSync(outPath, '');
+  if (outPath) {
+    mkdirSync(dirname(outPath), { recursive: true });
+    writeFileSync(outPath, '');
+  }
   return async function world(text) {
     const line = { kind: 'world', atMs: Date.now(), text };
     const json = JSON.stringify(line);
-    appendFileSync(outPath, json + '\n');
+    if (outPath) appendFileSync(outPath, json + '\n');
     console.log(json);
     if (!ALIBI_URL) return;
     try {
@@ -216,6 +236,7 @@ function summary(name, stats, seconds) {
  */
 const scenarios = {
   outage: {
+    record: { name: 'outage', title: 'The database outage', planted: "The shop's database was stopped for 90 seconds. Nothing was wrong with the new checkout." },
     minutes: 4,
     async script({ world, totalMs }) {
       await sleep(60_000);
@@ -232,6 +253,7 @@ const scenarios = {
   },
 
   'coupon-bug': {
+    record: { name: 'coupon-bug', title: 'The coupon bug', planted: "Carts with the SAVE10 coupon crash inside the new checkout's own code." },
     minutes: 9,
     async script({ world, traffic, totalMs }) {
       const started = Date.now();
@@ -253,6 +275,7 @@ const scenarios = {
   },
 
   'degraded-host': {
+    record: { name: 'slow-host', title: 'The slow host', planted: "The shop's CPU was throttled to a twentieth of a core. Nothing was changed in the new checkout." },
     minutes: 9,
     async script({ world, totalMs, args }) {
       const cpus = args.cpus ?? THROTTLED_CPUS;
@@ -272,7 +295,9 @@ async function runScenario(name, args) {
   const rps = Number(args.rps ?? 2);
   const minutes = Number(args.minutes ?? scenario.minutes);
   const totalMs = minutes * 60_000;
-  const out = resolve(args.out ?? join('runs', `${name}.world.jsonl`));
+  const out = args.out ? resolve(args.out) : undefined;
+  await armAlibi(scenario.record);
+  console.log(`Watch it live at http://127.0.0.1:4173 (the board), Flagsmith at http://127.0.0.1:8000, traces at http://127.0.0.1:16686.`);
   const world = makeWorld(out);
   const traffic = makeTraffic({ rps });
 
@@ -293,7 +318,7 @@ async function runScenario(name, args) {
     await finishAlibi();
   }
   console.log(summary(name, traffic.stats, (Date.now() - startedAt) / 1000));
-  console.log(`World lines are in ${out}`);
+  if (out) console.log(`World lines are in ${out}`);
 }
 
 // ---------------------------------------------------------------- reset
