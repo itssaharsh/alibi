@@ -211,7 +211,7 @@ flowchart LR
 - You wrap the feature's code in one span that carries `alibi.flagged_path=<flag>`.
 - The collector you already run gets one more exporter.
 - For each failing request, Alibi finds the span where the error started and classes the request: flagged path, dependency, server, or mixed. It writes one sentence from that span's own fields, for example: "Failed in pg.connect, a dependency call (db.system.name=postgresql): Connection terminated unexpectedly. The dependency was unavailable, so this does not count."
-- The engine (`packages/core`) is pure TypeScript with no dependencies. The guard service and the page run the same code, and 146 tests pin its sentences word for word, including on spans captured from the real stack and on the three recorded runs.
+- The engine (`packages/core`) is pure TypeScript with no dependencies. The guard service and the page run the same code, and 153 tests pin its sentences word for word, including on spans captured from the real stack and on the three recorded runs.
 
 The attribute names follow OpenTelemetry's feature-flag semantic conventions, which are still a release candidate, so this is not a conformance claim.
 
@@ -255,7 +255,7 @@ Limits worth knowing before you rely on it:
 
 - **The count has no time window.** The rule says "more than 15 requests", so 16 failures spread over a day switch the flag off as surely as 16 in a minute. Re-arm Alibi when you start a rollout.
 - **A dependency that only the new code calls.** If it is down, those failures do not count, because the rule calls that infrastructure. Alibi raises a notice instead ("the stable version never makes this call, so a person should look"); it does not switch the flag off.
-- **A feature that breaks something shared.** If the new code overloads the database for everyone, every failure is a dependency failure in both versions. Alibi will not count them, and an arm comparison will not see a gap either. A person has to catch that one.
+- **A feature that breaks something shared.** If the new code overloads the database for everyone, every failure is a dependency failure in both versions, and by the rule none of them count. Alibi raises a notice when a shared dependency fails far more often with the flag on than in the stable version (30 points apart, at least 20 requests each), because the rule asks for that comparison. If both versions fail alike, nothing tells it apart from an outage, and a person has to catch it.
 - **It needs a stable arm.** The level that "recovered" is tested against comes from requests that got the stable version, so a flag that is on for everyone has nothing to compare with.
 - **Eighteen runs of one scripted shop.** They are recorded and repeatable, not a study of real traffic.
 

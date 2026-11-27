@@ -37,6 +37,7 @@ describe('defaults', () => {
       tolerance: { windowMs: 60000, minRequests: 20, errorRatePoints: 2, p95Factor: 1.25 },
       plainRule: { windowMs: 30000, minRequests: 20, errorRate: 0.2 },
       armRule: { windowMs: 60000, minRequestsPerArm: 20, errorRatePoints: 10 },
+      noticeRule: { minRequestsPerArm: 20, ratePoints: 30 },
     });
   });
 });
@@ -436,5 +437,74 @@ describe('the notice for a dependency only the feature calls', () => {
     const restored = Guard.restore(JSON.parse(JSON.stringify(guard.snapshot())));
     expect(restored.state.notices).toEqual(guard.state.notices);
     for (let n = 6; n <= 9; n += 1) expect(types(restored.ingest(refusedFromFlaggedPath(n), START + n * 1000))).toEqual(['verdict']);
+  });
+});
+
+describe('the notice for a dependency both versions call', () => {
+  const SPAN = 'pg.query:SELECT price_rules';
+  const through = (variation: string, failed: boolean, i: number) => ({
+    ...makeVerdict({ endMs: START + i * 100, variation, failed, failureClass: 'dependency' }),
+    points: [{ name: SPAN, durationMs: 5, error: failed, dependency: true }],
+  });
+  /** `on` flag-on requests of which `onFailed` fail, then `stable` requests of which `stableFailed` fail. */
+  function run(on: number, onFailed: number, stable: number, stableFailed: number, config0 = config()) {
+    const guard = new Guard(config0);
+    const events: GuardEvent[] = [];
+    let i = 0;
+    for (let k = 0; k < Math.max(on, stable); k += 1) {
+      if (k < on) events.push(...guard.ingest(through(V2, k < onFailed, i++), START + i * 100));
+      if (k < stable) events.push(...guard.ingest(through(STABLE, k < stableFailed, i++), START + i * 100));
+    }
+    return { guard, events: events.filter((e) => e.type === 'notice') };
+  }
+
+  it('fires once, with both rates and counts in words, when the flag-on arm fails far more', () => {
+    const { guard, events } = run(41, 25, 41, 2);
+    expect(events).toHaveLength(1);
+    expect(guard.state.notices?.[0]).toMatchObject({ kind: 'dependency-uneven', span: SPAN });
+    expect(guard.state.notices?.[0]?.text).toMatch(
+      /^pg\.query:SELECT price_rules, a dependency both versions call, failed for \d+\.\d% of requests with the flag on \(\d+ of \d+\) and \d+\.\d% of stable requests \(\d+ of \d+\)\. By the rule these do not count toward the switch-off\. The gap is wide, so a person should look at what the flagged path does differently\.$/,
+    );
+    expect(guard.state.counted).toBe(0);
+    expect(guard.state.phase).toBe('armed');
+  });
+
+  it('says the exact sentence for the counts it fired at', () => {
+    const { guard } = run(20, 20, 20, 0);
+    expect(guard.state.notices?.[0]?.text).toBe(
+      `${SPAN}, a dependency both versions call, failed for 100.0% of requests with the flag on (20 of 20) and 0.0% of stable requests (0 of 20). By the rule these do not count toward the switch-off. The gap is wide, so a person should look at what the flagged path does differently.`,
+    );
+  });
+
+  it('does not fire when both arms fail alike, as in an ordinary outage', () => {
+    expect(run(60, 40, 60, 38).events).toEqual([]);
+  });
+
+  it('does not fire below the minimum requests in either arm', () => {
+    expect(run(19, 19, 40, 0).events).toEqual([]);
+    expect(run(40, 40, 19, 0).events).toEqual([]);
+  });
+
+  it('does not fire just under the margin and fires at it', () => {
+    expect(run(20, 8, 20, 3).events).toEqual([]);
+    expect(run(20, 8, 20, 2).events).toHaveLength(1);
+  });
+
+  it('uses the default rule when a run header has none', () => {
+    const { noticeRule: _omitted, ...older } = config();
+    expect(run(25, 25, 25, 0, older).events).toHaveLength(1);
+  });
+
+  it('is judged from real span trees: a dependency both versions call', () => {
+    const guard = new Guard(config());
+    for (let n = 1; n <= 40; n += 1) {
+      const variation = n % 2 === 0 ? V2 : STABLE;
+      const planted = variation === V2 && n % 4 === 0 ? [faults.dbRefused('shop-query')] : [];
+      const v = judgeTrace(checkoutTrace({ n, startMs: START + n * 100, variation, faults: planted }), config());
+      if (v) guard.ingest(v, v.endMs);
+    }
+    const uneven = guard.state.notices?.filter((n) => n.kind === 'dependency-uneven') ?? [];
+    expect(uneven.map((n) => n.span)).toEqual(['pg.query:SELECT shop']);
+    expect(guard.state.counted).toBe(0);
   });
 });

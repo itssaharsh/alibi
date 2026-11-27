@@ -65,6 +65,8 @@ export interface SpanPoint {
   name: string;
   durationMs: number;
   error: boolean;
+  /** True when the span is a call to a dependency (a database, another service, a queue). */
+  dependency?: boolean;
 }
 
 /** The engine's reading of one finished request. */
@@ -118,6 +120,15 @@ export interface GuardConfig {
    * existed has none, and the defaults apply.
    */
   armRule?: ArmRule;
+  /** When a dependency both versions call fails unevenly between them. Defaults apply when absent. */
+  noticeRule?: NoticeRule;
+}
+
+export interface NoticeRule {
+  /** Fewest requests through the span needed in each arm. */
+  minRequestsPerArm: number;
+  /** The flag-on failure rate must exceed the stable one by at least this many percentage points. */
+  ratePoints: number;
 }
 
 export interface ArmRule {
@@ -129,8 +140,10 @@ export interface ArmRule {
   errorRatePoints: number;
 }
 
-/** Said once per span: failures in a dependency that only the flagged path calls. It is not a count. */
+/** Said once per span and kind. A notice is for a person to read; it is never a count. */
 export interface Notice {
+  /** `flagged-path-only`: a dependency only the flagged path calls. `dependency-uneven`: one both versions call, failing far more with the flag on. */
+  kind?: 'flagged-path-only' | 'dependency-uneven';
   atMs: number;
   /** The dependency span's name. */
   span: string;

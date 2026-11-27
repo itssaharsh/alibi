@@ -1,10 +1,12 @@
 import type {
   ArmRule,
+  NoticeRule,
   CauseLabel,
   GuardConfig,
   GuardEvent,
   GuardPhase,
   GuardState,
+  Notice,
   Rates,
   StableBaselineWindow,
   TraceVerdict,
@@ -19,6 +21,8 @@ const NOTICE_AFTER = 5;
 
 export const DEFAULT_ARM_RULE: ArmRule = { windowMs: 60000, minRequestsPerArm: 20, errorRatePoints: 10 };
 
+export const DEFAULT_NOTICE_RULE: NoticeRule = { minRequestsPerArm: 20, ratePoints: 30 };
+
 export function defaultConfig(flag: string, stableVariation: string): GuardConfig {
   return {
     flag,
@@ -28,6 +32,7 @@ export function defaultConfig(flag: string, stableVariation: string): GuardConfi
     tolerance: { windowMs: 60000, minRequests: 20, errorRatePoints: 2, p95Factor: 1.25 },
     plainRule: { windowMs: 30000, minRequests: 20, errorRate: 0.2 },
     armRule: { ...DEFAULT_ARM_RULE },
+    noticeRule: { ...DEFAULT_NOTICE_RULE },
   };
 }
 
@@ -56,6 +61,8 @@ interface GuardMemory {
   armStable: Sample[];
   /** Names of spans the stable version has run. */
   stableSpans: string[];
+  /** Requests through each dependency span while armed, and how many failed there, by arm. */
+  dependencySpans: Record<string, { flagOn: { through: number; failed: number }; stable: { through: number; failed: number } }>;
   /** Flag-on requests lost to an unavailable dependency on the flagged path, by span name. */
   flaggedDependencyFailures: Record<string, number>;
   flagOnDurations: number[];
@@ -97,6 +104,7 @@ export class Guard {
       armFlagOn: [],
       armStable: [],
       stableSpans: [],
+      dependencySpans: {},
       flaggedDependencyFailures: {},
       flagOnDurations: [],
       stableDurations: [],
@@ -172,6 +180,7 @@ export class Guard {
     this.checkPlainRule(nowMs, events);
     this.checkArmRule(nowMs, events);
     this.checkNotice(verdict, nowMs, events);
+    this.checkUneven(verdict, nowMs, events);
     if (s.phase === 'armed' && s.counted > s.config.threshold) {
       s.phase = 'switching-off';
       events.push({ type: 'threshold-crossed', atMs: nowMs, counted: s.counted, threshold: s.config.threshold });
@@ -281,13 +290,50 @@ export class Guard {
     for (const span of names) {
       const failures = (this.m.flaggedDependencyFailures[span] ?? 0) + 1;
       this.m.flaggedDependencyFailures[span] = failures;
-      const known = (s.notices ?? []).some((notice) => notice.span === span);
+      const known = (s.notices ?? []).some((notice) => notice.span === span && notice.kind === 'flagged-path-only');
       if (failures < NOTICE_AFTER || known || this.m.stableSpans.includes(span)) continue;
-      const notice = {
+      const notice: Notice = {
+        kind: 'flagged-path-only',
         atMs: nowMs,
         span,
         failures,
         text: `${failures} requests with the flag on failed in ${span}, a dependency that only the flagged path calls and that was unavailable. By the rule these do not count toward the switch-off. The stable version never makes this call, so a person should look.`,
+      };
+      s.notices = [...(s.notices ?? []), notice];
+      events.push({ type: 'notice', atMs: nowMs, notice });
+    }
+  }
+
+  /**
+   * A dependency both versions call that fails far more with the flag on. The author's rule asks
+   * for this comparison at the same failing points; it only informs a person and never counts.
+   */
+  private checkUneven(verdict: TraceVerdict, nowMs: number, events: GuardEvent[]): void {
+    const s = this.s;
+    if (s.phase !== 'armed' || !verdict.evaluation) return;
+    const rule = s.config.noticeRule ?? DEFAULT_NOTICE_RULE;
+    const names = new Set((verdict.points ?? []).filter((p) => p.dependency).map((p) => p.name));
+    for (const span of names) {
+      const entry = (this.m.dependencySpans[span] ??= {
+        flagOn: { through: 0, failed: 0 },
+        stable: { through: 0, failed: 0 },
+      });
+      const arm = verdict.flagOn ? entry.flagOn : entry.stable;
+      arm.through += 1;
+      if ((verdict.points ?? []).some((p) => p.name === span && p.error)) arm.failed += 1;
+      const known = (s.notices ?? []).some((notice) => notice.span === span && notice.kind === 'dependency-uneven');
+      const { flagOn, stable } = entry;
+      if (known || flagOn.through < rule.minRequestsPerArm || stable.through < rule.minRequestsPerArm) continue;
+      const onRate = flagOn.failed / flagOn.through;
+      const stableRate = stable.failed / stable.through;
+      if (onRate - stableRate < rule.ratePoints / 100 - EPSILON) continue;
+      const pct = (rate: number) => `${(rate * 100).toFixed(1)}%`;
+      const notice: Notice = {
+        kind: 'dependency-uneven',
+        atMs: nowMs,
+        span,
+        failures: flagOn.failed,
+        text: `${span}, a dependency both versions call, failed for ${pct(onRate)} of requests with the flag on (${flagOn.failed} of ${flagOn.through}) and ${pct(stableRate)} of stable requests (${stable.failed} of ${stable.through}). By the rule these do not count toward the switch-off. The gap is wide, so a person should look at what the flagged path does differently.`,
       };
       s.notices = [...(s.notices ?? []), notice];
       events.push({ type: 'notice', atMs: nowMs, notice });

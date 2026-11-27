@@ -35,6 +35,11 @@ function userFacingText(r: ReplayResult): string {
   ].join('\n');
 }
 
+function expectNoNotices(r: ReplayResult): void {
+  expect(r.state.notices).toBeUndefined();
+  expect(r.events.filter((e) => e.type === 'notice')).toEqual([]);
+}
+
 function expectNoCauseWording(r: ReplayResult): void {
   const text = userFacingText(r).toLowerCase();
   for (const phrase of FORBIDDEN) expect(text).not.toContain(phrase);
@@ -91,7 +96,7 @@ describe.skipIf(!existsSync(runs))('the recorded runs, against their answer keys
     expect([arm.flagOnRequests, arm.stableRequests]).toEqual([46, 66]);
     expect(arm.flagOnErrorRate).toBeCloseTo(18 / 46);
     expect(arm.stableErrorRate).toBeCloseTo(19 / 66);
-    expect(r.state.notices).toBeUndefined();
+    expectNoNotices(r);
     expect(formatReport(r)).toContain('Arm comparison (flag on against stable): would have switched the flag off at +01:22, flag on 39.1% against stable 28.8% over the last 60 seconds.');
     expectNoCauseWording(r);
   });
@@ -126,7 +131,7 @@ describe.skipIf(!existsSync(runs))('the recorded runs, against their answer keys
     const arm = armTrip(r);
     expect([arm.flagOnRequests, arm.stableRequests, arm.stableErrorRate]).toEqual([49, 66, 0]);
     expect(arm.flagOnErrorRate).toBeCloseTo(5 / 49);
-    expect(r.state.notices).toBeUndefined();
+    expectNoNotices(r);
     expect(r.record?.armRuleTrippedAtMs).toBe(r.state.armRuleTrippedAtMs);
     expect(recordToMarkdown(r.record as NonNullable<typeof r.record>)).toContain('## Two simpler rules on the same requests');
     expectNoCauseWording(r);
@@ -158,7 +163,7 @@ describe.skipIf(!existsSync(runs))('the recorded runs, against their answer keys
     const arm = armTrip(r);
     expect([arm.flagOnRequests, arm.stableRequests, arm.stableErrorRate]).toEqual([62, 53, 0]);
     expect(arm.flagOnErrorRate).toBeCloseTo(7 / 62);
-    expect(r.state.notices).toBeUndefined();
+    expectNoNotices(r);
     expectNoCauseWording(r);
   });
 });

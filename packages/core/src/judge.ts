@@ -260,7 +260,12 @@ export function judgeTrace(spans: readonly FlatSpan[], config: GuardConfig): Tra
     }
   }
 
-  const points = spans.map((span) => ({ name: span.name, durationMs: span.durationMs, error: span.error }));
+  const points = spans.map((span) => ({
+    name: span.name,
+    durationMs: span.durationMs,
+    error: span.error,
+    ...(isDependencyCall(span) ? { dependency: true } : {}),
+  }));
   const base = {
     traceId: root.traceId,
     route: text(root.attrs['http.route']) ?? root.name,
