@@ -269,6 +269,8 @@ The same scoring applied to the eighteen earlier runs, after the fact: both rule
 
 Over all 42 runs: Alibi right in 36, the 20-point rule in 29, the cumulative test in 29, excess failures in 28. Every run, with its failures by class, both rules' times and the checks that each scripted fault really happened, is in [`runs/outage-scenarios/RESULTS.md`](runs/outage-scenarios/RESULTS.md). Three runs a scenario show what happened three times; they are not a study.
 
+The recordings themselves, all 24 and the 18 earlier ones, are attached to the [recordings release](https://github.com/itssaharsh/alibi/releases/tag/recordings-2026-11-27) (two archives, 9 MB and 8 MB). Its README has the one command that recomputes `summary.json` from them; it comes out byte for byte the same.
+
 The two extra runs on the page, the feature's own service going down and the rare bug, were recorded after these, with Alibi acting instead of observing. They are there to be looked at and are in none of the totals.
 
 ## How it works
