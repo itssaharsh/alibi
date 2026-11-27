@@ -1,0 +1,9 @@
+{
+  "name": "@alibi/load",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Traffic and scripted scenarios for the Alibi example stack.",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "bin": { "alibi-load": "./run.mjs" }
+}

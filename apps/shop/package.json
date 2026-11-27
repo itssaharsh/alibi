@@ -1,0 +1,23 @@
+{
+  "name": "@alibi/shop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A small shop service for the Alibi example: a checkout behind a Flagsmith flag, traced with OpenTelemetry.",
+  "type": "module",
+  "engines": { "node": ">=22.15" },
+  "scripts": {
+    "start": "node --import ./src/telemetry.js ./src/server.js"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.10.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.301.2",
+    "@opentelemetry/instrumentation": "0.301.2",
+    "@opentelemetry/instrumentation-express": "0.73.0",
+    "@opentelemetry/instrumentation-http": "0.301.2",
+    "@opentelemetry/instrumentation-pg": "0.78.0",
+    "@opentelemetry/sdk-node": "0.301.2",
+    "express": "4.22.3",
+    "flagsmith-nodejs": "8.1.2",
+    "pg": "8.23.1"
+  }
+}

@@ -1,0 +1,42 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  otlphttp/alibi:
+    endpoint: http://alibi:4319
+    encoding: json
+    timeout: 5s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 2s
+      max_elapsed_time: 5s
+    sending_queue:
+      enabled: true
+      num_consumers: 1
+      queue_size: 20
+  file:
+    path: /captures/traces.json
+    rotation:
+      max_megabytes: 50
+      max_backups: 2
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger, otlphttp/alibi, file]

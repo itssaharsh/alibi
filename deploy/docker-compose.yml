@@ -1,0 +1,197 @@
+name: alibi
+
+x-secrets-entrypoint: &secrets-entrypoint
+  - /bin/sh
+  - -c
+  - set -a; . /shared/secrets.env; set +a; exec flagsmith "$$@"
+  - --
+
+x-flagsmith: &flagsmith
+  image: docker.flagsmith.com/flagsmith/flagsmith:2.295.2
+  entrypoint: *secrets-entrypoint
+  environment:
+    USE_POSTGRES_FOR_ANALYTICS: 'true'
+    ENVIRONMENT: production
+    DJANGO_ALLOWED_HOSTS: '*'
+    FLAGSMITH_DOMAIN: localhost:8000
+    TASK_RUN_METHOD: TASK_PROCESSOR
+    EXPERIMENTATION_ENABLED: 'true'
+  volumes:
+    - ./data/shared:/shared:ro
+
+volumes:
+  flagsmith-pgdata:
+  shop-pgdata:
+
+services:
+  secrets:
+    image: alpine:3.20
+    restart: "no"
+    volumes:
+      - ./data/shared:/shared
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        [ -f /shared/secrets.env ] && exit 0
+        gen() { head -c 48 /dev/urandom | base64 | tr -d '/+=\n' | head -c 32; }
+        flagsmith_pg=$$(gen)
+        shop_pg=$$(gen)
+        printf '%s' "$$flagsmith_pg" > /shared/flagsmith_db_password
+        printf '%s' "$$shop_pg" > /shared/shop_db_password
+        {
+          echo "DATABASE_URL=postgresql://postgres:$$flagsmith_pg@flagsmith-db:5432/flagsmith"
+          echo "DJANGO_SECRET_KEY=$$(gen)$$(gen)"
+          echo "WAREHOUSE_CREDENTIALS_SECRET=$$(gen)"
+          echo "SHOP_DATABASE_URL=postgresql://shop:$$shop_pg@shop-db:5432/shop"
+          echo "ADMIN_PASSWORD=$$(gen)"
+        } > /shared/secrets.env.tmp
+        chmod 644 /shared/*
+        mv /shared/secrets.env.tmp /shared/secrets.env
+
+  flagsmith-db:
+    image: postgres:15.5-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: flagsmith
+      POSTGRES_PASSWORD_FILE: /shared/flagsmith_db_password
+    volumes:
+      - flagsmith-pgdata:/var/lib/postgresql/data
+      - ./data/shared:/shared:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -d flagsmith -U postgres']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    depends_on:
+      secrets:
+        condition: service_completed_successfully
+
+  flagsmith-migrate:
+    <<: *flagsmith
+    restart: "no"
+    command: [migrate]
+    healthcheck:
+      disable: true
+    depends_on:
+      flagsmith-db:
+        condition: service_healthy
+
+  flagsmith:
+    <<: *flagsmith
+    restart: unless-stopped
+    command: [serve]
+    ports:
+      - 127.0.0.1:8000:8000
+    mem_limit: 1g
+    healthcheck:
+      test: ['CMD-SHELL', "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/liveness/', timeout=3)\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    depends_on:
+      flagsmith-migrate:
+        condition: service_completed_successfully
+
+  flagsmith-task-processor:
+    <<: *flagsmith
+    restart: unless-stopped
+    command: [run-task-processor]
+    mem_limit: 768m
+    depends_on:
+      flagsmith-migrate:
+        condition: service_completed_successfully
+
+  bootstrap:
+    build: ./bootstrap
+    restart: "no"
+    volumes:
+      - ./data/shared:/shared
+    depends_on:
+      flagsmith:
+        condition: service_healthy
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.65.0
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:16686:16686
+    mem_limit: 512m
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:14269/ || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.118.0
+    restart: unless-stopped
+    user: "0"
+    command: ['--config=/etc/otelcol/config.yaml']
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
+      - ./data/captures:/captures
+    mem_limit: 384m
+    depends_on:
+      jaeger:
+        condition: service_healthy
+
+  shop-db:
+    image: postgres:15.5-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_DB: shop
+      POSTGRES_PASSWORD_FILE: /shared/shop_db_password
+    volumes:
+      - shop-pgdata:/var/lib/postgresql/data
+      - ./data/shared:/shared:ro
+      - ./shop-db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    mem_limit: 256m
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -d shop -U shop']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    depends_on:
+      secrets:
+        condition: service_completed_successfully
+
+  shop:
+    build: ../apps/shop
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
+      - set -a; . /shared/secrets.env; . /shared/flagsmith.env; set +a; exec "$$@"
+      - --
+    command: [node, --import, ./src/telemetry.js, ./src/server.js]
+    environment:
+      PORT: '8080'
+      OTEL_SERVICE_NAME: shop
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_BSP_SCHEDULE_DELAY: '1000'
+      FLAGSMITH_API_URL: http://flagsmith:8000/api/v1/
+    volumes:
+      - ./data/shared:/shared:ro
+    ports:
+      - 127.0.0.1:8080:8080
+    mem_limit: 512m
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:8080/healthz || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+      shop-db:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
