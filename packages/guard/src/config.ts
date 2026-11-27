@@ -54,6 +54,8 @@ export interface ServiceConfig {
   events: EventNames;
   flagsmith: FlagsmithSettings;
   controlToken?: string;
+  /** Count and record as usual, but never ask Flagsmith to switch anything off. For comparing rules on the same requests. */
+  observeOnly: boolean;
   recordPath?: string;
   recordDir?: string;
   run: { name: string; title: string; planted: string };
@@ -169,6 +171,7 @@ export function loadConfig(env: Env, read: (path: string) => string = (path) => 
   for (const [section, target] of [
     ['tolerance', guard.tolerance],
     ['plainRule', guard.plainRule],
+    ['armRule', guard.armRule ?? {}],
   ] as const) {
     const given = rules[section];
     if (given === undefined) continue;
@@ -220,6 +223,7 @@ export function loadConfig(env: Env, read: (path: string) => string = (path) => 
     guard,
     events,
     flagsmith,
+    observeOnly: env.ALIBI_OBSERVE_ONLY !== undefined ? ['1', 'true'].includes(env.ALIBI_OBSERVE_ONLY) : rules.observeOnly === true,
     run: { name, title: env.ALIBI_RUN_TITLE ?? name, planted: env.ALIBI_RUN_PLANTED ?? 'Not stated.' },
     secrets,
   };

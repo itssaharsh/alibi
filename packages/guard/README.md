@@ -33,6 +33,7 @@ Flagsmith settings come from these variables or from the bootstrap file (`ALIBI_
 | `ALIBI_CHECK_IDENTITIES` | `20` | How many identities are evaluated to confirm a switch-off. |
 | `ALIBI_RULES` | none | JSON rule file: `flag`, `stableVariation`, `threshold`, `watchMs`, `tolerance`, `plainRule`, `events` (`exposure`, `completed`, `failure`, `latency`). |
 | `ALIBI_FLAG`, `ALIBI_STABLE_VARIATION`, `ALIBI_THRESHOLD`, `ALIBI_WATCH_MS` | rule file, then bootstrap file, then `checkout_v2`, `stable`, `15`, `300000` | Override single rule values. |
+| `ALIBI_OBSERVE_ONLY` | off (or `observeOnly` in the rule file) | `1`: count and record exactly as usual, but never ask Flagsmith to switch anything off. When the count passes the threshold the crossing is recorded with a `switch-off` line `ok: false` ("observe only: the flag was not switched off") and `/api/state` says "observing". For comparing rules on the same requests; used by `runs/outage-scenarios`. The rule file's `armRule` (`windowMs`, `minRequestsPerArm`, `errorRatePoints`) sets the flag-on against stable comparison. |
 | `ALIBI_MAX_BODY_BYTES` | `8388608` | Largest accepted body, also after unzipping. |
 | `ALIBI_CONTROL_TOKEN` | none | When set, `POST /api/arm`, `/api/world` and `/api/finish` need `Authorization: Bearer <token>` (or `X-Alibi-Token`). |
 | `ALIBI_RECORD` | none | Write a run file (JSON lines) to this path. |

@@ -1,0 +1,4 @@
+{
+  "observeOnly": true,
+  "armRule": { "errorRatePoints": 20 }
+}

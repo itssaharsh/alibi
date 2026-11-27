@@ -1,0 +1,7 @@
+# Added to docker-compose.downstream.yml for the flaky database scenario only (database-flaky). The shop takes a new
+# database connection for every request and closes it, so that the proxy failing a share of new connections fails the
+# same share of requests, and a pool of kept connections cannot hide it. Every other scenario uses the shop's normal pool.
+services:
+  shop:
+    environment:
+      SHOP_DB_FRESH_CONNECTIONS: '1'

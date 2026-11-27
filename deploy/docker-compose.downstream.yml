@@ -1,0 +1,99 @@
+# The outage scenarios (runs/outage-scenarios/PLAN.md). Add this file to the example:
+#   docker compose -f docker-compose.yml -f docker-compose.downstream.yml up -d --build --wait
+# It adds a tax service every checkout calls, a rules service only the new checkout calls (inside its flagged code),
+# and a fault proxy between the shop and its database. Alibi only observes: it counts and records, never switches off,
+# and its simple margin is 20 points. Without this file nothing here exists and the example is unchanged.
+#
+# The shop is given the addresses of tax, rules and the fault proxy in its hosts file, on a network with fixed addresses.
+# A stopped container's name stops resolving, and a Node lookup that hangs for five seconds holds one of the four threads
+# every other lookup of the shop (the flag service, the other services) needs, so a stopped service would fail requests
+# that never call it. With the addresses fixed, a stopped service simply does not answer, and only its callers fail.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.29.77.0/24
+
+services:
+  tax:
+    build: ../apps/downstream
+    restart: unless-stopped
+    networks:
+      default:
+        ipv4_address: 172.29.77.10
+    environment:
+      SERVICE: tax
+      OTEL_SERVICE_NAME: tax
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_BSP_SCHEDULE_DELAY: '1000'
+    mem_limit: 128m
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:3000/healthz || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  rules:
+    build: ../apps/downstream
+    restart: unless-stopped
+    networks:
+      default:
+        ipv4_address: 172.29.77.11
+    environment:
+      SERVICE: rules
+      OTEL_SERVICE_NAME: rules
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_BSP_SCHEDULE_DELAY: '1000'
+    mem_limit: 128m
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:3000/healthz || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.12.0
+    restart: unless-stopped
+    networks:
+      default:
+        ipv4_address: 172.29.77.12
+    command: ['-host=0.0.0.0', '-config=/config/toxiproxy.json']
+    volumes:
+      - ./toxiproxy.json:/config/toxiproxy.json:ro
+    ports:
+      - 127.0.0.1:8474:8474
+    mem_limit: 64m
+    healthcheck:
+      test: ['CMD', '/toxiproxy-cli', 'list']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      shop-db:
+        condition: service_healthy
+
+  shop:
+    environment:
+      TAX_URL: http://tax:3000
+      RULES_URL: http://rules:3000
+      SHOP_DB_PROXY: toxiproxy:15432
+    extra_hosts:
+      - 'tax:172.29.77.10'
+      - 'rules:172.29.77.11'
+      - 'toxiproxy:172.29.77.12'
+    depends_on:
+      tax:
+        condition: service_healthy
+      rules:
+        condition: service_healthy
+      toxiproxy:
+        condition: service_healthy
+
+  alibi:
+    environment:
+      ALIBI_RULES: /rules/rules.json
+      ALIBI_RECORD_DIR: /data/runs
+    volumes:
+      - ./downstream-rules.json:/rules/rules.json:ro

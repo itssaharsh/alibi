@@ -68,7 +68,7 @@ export interface SwitchOffView {
 
 export interface StatePayload {
   state: GuardState;
-  flagsmith: { mode: 'experiment' | 'plain-flag'; /** In plain words, when the flag is not in an experiment. */ note?: string; forwarded: ForwardCounters; /** Set once the rollout is 0%: no more exposures or metrics are sent. */ forwardingStoppedAtMs?: number; /** Feature Health: the flag is marked unhealthy after a switch-off. Absent when Flagsmith has no such webhook. */ featureHealth?: { posts: number; lastPostedAtMs?: number; lastProblem?: string }; switchOff: SwitchOffView; results?: FlagsmithExperimentSummary };
+  flagsmith: { mode: 'experiment' | 'plain-flag'; /** True when this run only observes: nothing is ever switched off. */ observeOnly?: boolean; /** In plain words, when the flag is not in an experiment. */ note?: string; forwarded: ForwardCounters; /** Set once the rollout is 0%: no more exposures or metrics are sent. */ forwardingStoppedAtMs?: number; /** Feature Health: the flag is marked unhealthy after a switch-off. Absent when Flagsmith has no such webhook. */ featureHealth?: { posts: number; lastPostedAtMs?: number; lastProblem?: string }; switchOff: SwitchOffView; results?: FlagsmithExperimentSummary };
   /** The last 200 verdicts that failed or had the flag on. */
   recent?: TraceVerdict[];
   timeline: TimelineEntry[];
@@ -160,6 +160,7 @@ export class AlibiService {
   private switchOff = { requested: false, detail: '' };
   private results: FlagsmithExperimentSummary | undefined;
   private reading = false;
+  private observed = false;
   private lastRefreshAtMs: number | undefined;
   private forwardingStoppedAtMs: number | undefined;
   private health = { posts: 0 } as { posts: number; lastPostedAtMs?: number; lastProblem?: string };
@@ -453,6 +454,7 @@ export class AlibiService {
 
   /** Starts the switch-off once for the crossing the rule is waiting on. Further calls while it runs do nothing. */
   private ensureSwitchOff(): void {
+    if (this.config.observeOnly) return this.observe();
     if (!this.guard.switchOffRequested || this.switching) return;
     this.switching = true;
     const generation = this.generation;
@@ -461,6 +463,21 @@ export class AlibiService {
       .finally(() => {
         if (generation === this.generation) this.switching = false;
       });
+  }
+
+  /**
+   * Observe-only: the crossing is recorded like any other, but Flagsmith is never asked to switch anything off. The
+   * rule stays waiting for an answer, so the run goes on counting and comparing on the same requests. The refusal is
+   * written down once, as the answer a replay will be given.
+   */
+  private observe(): void {
+    if (!this.guard.switchOffRequested || this.observed) return;
+    this.observed = true;
+    const now = this.stamp();
+    const reason = 'observe only: the flag was not switched off';
+    this.note({ kind: 'flagsmith', atMs: now, what: 'switch-off', ok: false, detail: reason });
+    this.emit(this.guard.confirmSwitchOff(now, false, reason));
+    this.switchOff.detail = 'observing: the count passed the threshold and the flag was not switched off';
   }
 
   private pickIdentities(): string[] {
@@ -639,6 +656,7 @@ export class AlibiService {
       state,
       flagsmith: {
         mode: this.config.flagsmith.experimentMode ? 'experiment' : 'plain-flag',
+        ...(this.config.observeOnly ? { observeOnly: true } : {}),
         ...(this.config.flagsmith.experimentMode ? {} : { note: NO_EXPERIMENT_NOTE }),
         forwarded: this.forwarder.totals,
         ...(this.forwardingStoppedAtMs === undefined ? {} : { forwardingStoppedAtMs: this.forwardingStoppedAtMs }),
@@ -708,6 +726,7 @@ export class AlibiService {
     this.results = undefined;
     this.endReadPending = false;
     this.reading = false;
+    this.observed = false;
     this.forwardingStoppedAtMs = undefined;
     this.health = { posts: 0 };
     this.lastRecord = undefined;

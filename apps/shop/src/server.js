@@ -1,4 +1,5 @@
 import { context, trace, SpanStatusCode } from '@opentelemetry/api';
+import http from 'node:http';
 import express from 'express';
 import pg from 'pg';
 import { DefaultFlag, Flagsmith } from 'flagsmith-nodejs';
@@ -16,8 +17,46 @@ class RequestTimeout extends Error {
   }
 }
 
+// Opt-in settings for the outage scenarios (deploy/docker-compose.downstream.yml). With none of them set the shop is
+// exactly the example: one pool straight to the database, no calls to other services.
+//   SHOP_DB_PROXY             host:port to reach the database through, instead of the host in SHOP_DATABASE_URL
+//   SHOP_DB_FRESH_CONNECTIONS each request uses one new database connection and closes it, so a proxy that fails a share
+//                             of connections fails the same share of requests and the pool cannot hide it
+//   TAX_URL                   every checkout, both versions, asks this service for a tax rate
+//   RULES_URL                 the new checkout asks this service for price rules, inside its flagged code path
+const DOWNSTREAM_TIMEOUT_MS = Number(process.env.DOWNSTREAM_TIMEOUT_MS ?? 1000);
+const FRESH_CONNECTIONS = process.env.SHOP_DB_FRESH_CONNECTIONS === '1';
+const TAX_URL = process.env.TAX_URL ?? '';
+const RULES_URL = process.env.RULES_URL ?? '';
+
+function databaseUrl() {
+  const url = new URL(process.env.SHOP_DATABASE_URL);
+  if (process.env.SHOP_DB_PROXY) {
+    const [host, port] = process.env.SHOP_DB_PROXY.split(':');
+    url.hostname = host;
+    url.port = port;
+  }
+  return url.toString();
+}
+
+/** A plain HTTP GET with a time limit, so a service that is down fails the request instead of hanging it. */
+function getJson(url) {
+  return new Promise((resolve, reject) => {
+    const req = http.get(url, { timeout: DOWNSTREAM_TIMEOUT_MS }, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        if (res.statusCode >= 500) reject(new Error(`${url} answered ${res.statusCode}`));
+        else resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error(`no answer from ${new URL(url).host} within ${DOWNSTREAM_TIMEOUT_MS} ms (timeout)`)));
+    req.on('error', reject);
+  });
+}
+
 const pool = new pg.Pool({
-  connectionString: process.env.SHOP_DATABASE_URL,
+  connectionString: databaseUrl(),
   max: 10,
   connectionTimeoutMillis: 1500,
   idleTimeoutMillis: 30000,
@@ -60,16 +99,16 @@ function stillWanted(req) {
   if (req.timedOut) throw new RequestTimeout(REQUEST_TIMEOUT_MS);
 }
 
-async function loadProducts() {
+async function loadProducts(db) {
   return inSpan('load_products', {}, async () => {
-    const { rows } = await pool.query('SELECT sku, name, category, price_cents FROM products ORDER BY sku');
+    const { rows } = await db.query('SELECT sku, name, category, price_cents FROM products ORDER BY sku');
     return rows;
   });
 }
 
-async function writeOrder({ userId, checkout, coupon, total, items }) {
+async function writeOrder(db, { userId, checkout, coupon, total, items }) {
   return inSpan('write_order', {}, async () => {
-    const { rows } = await pool.query(
+    const { rows } = await db.query(
       'INSERT INTO orders (user_id, checkout, coupon, total_cents, items) VALUES ($1, $2, $3, $4, $5) RETURNING id',
       [userId, checkout, coupon, total, JSON.stringify(items)],
     );
@@ -84,6 +123,7 @@ async function runStable(items, coupon, catalogue, bySku) {
 
 async function runV2(items, coupon, catalogue, bySku) {
   return runFlagged(FLAG, FLAG, async () => {
+    if (RULES_URL) await getJson(`${RULES_URL}/rules`);
     const subtotal = await v2Price(items, catalogue, bySku);
     return v2Coupon(subtotal, coupon);
   });
@@ -108,15 +148,26 @@ app.post('/checkout', async (req, res) => {
       req.checkout = variation;
       stillWanted(req);
 
-      const catalogue = await loadProducts();
-      stillWanted(req);
-      const bySku = new Map(catalogue.map((p) => [p.sku, p]));
-
-      const total = await (variation === STABLE ? runStable : runV2)(items, coupon, catalogue, bySku);
+      let tax = { rate: 0 };
+      if (TAX_URL) tax = await getJson(`${TAX_URL}/tax`);
       stillWanted(req);
 
-      const orderId = await writeOrder({ userId, checkout: req.checkout, coupon, total, items });
-      return { orderId, checkout: req.checkout, totalCents: total };
+      const client = FRESH_CONNECTIONS ? await pool.connect() : undefined;
+      try {
+        const db = client ?? pool;
+        const catalogue = await loadProducts(db);
+        stillWanted(req);
+        const bySku = new Map(catalogue.map((p) => [p.sku, p]));
+
+        const subtotal = await (variation === STABLE ? runStable : runV2)(items, coupon, catalogue, bySku);
+        const total = Math.round(subtotal * (1 + tax.rate));
+        stillWanted(req);
+
+        const orderId = await writeOrder(db, { userId, checkout: req.checkout, coupon, total, items });
+        return { orderId, checkout: req.checkout, totalCents: total };
+      } finally {
+        client?.release(true);
+      }
     });
     if (!res.headersSent) res.json(body);
   } catch (error) {

@@ -20,6 +20,14 @@ import { promisify } from 'node:util';
 const run = promisify(execFile);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const COMPOSE_FILE = join(ROOT, 'deploy', 'docker-compose.yml');
+// ALIBI_EXAMPLE_PROFILE=downstream adds the services of the outage scenarios (deploy/docker-compose.downstream.yml);
+// downstream-flaky also adds the file for the flaky database scenario (deploy/docker-compose.downstream-flaky.yml).
+const PROFILE = process.env.ALIBI_EXAMPLE_PROFILE ?? '';
+const COMPOSE_FILES = [
+  COMPOSE_FILE,
+  ...(PROFILE.startsWith('downstream') ? [join(ROOT, 'deploy', 'docker-compose.downstream.yml')] : []),
+  ...(PROFILE === 'downstream-flaky' ? [join(ROOT, 'deploy', 'docker-compose.downstream-flaky.yml')] : []),
+];
 const FLAGSMITH_JSON = join(ROOT, 'deploy', 'data', 'shared', 'flagsmith.json');
 
 const SHOP_URL = process.env.SHOP_URL ?? 'http://127.0.0.1:8080';
@@ -48,7 +56,7 @@ function parseArgs(argv) {
 // ---------------------------------------------------------------- docker
 
 async function compose(...args) {
-  const { stdout } = await run('docker', ['compose', '-f', COMPOSE_FILE, ...args], { maxBuffer: 10_000_000 });
+  const { stdout } = await run('docker', ['compose', ...COMPOSE_FILES.flatMap((f) => ['-f', f]), ...args], { maxBuffer: 10_000_000 });
   return stdout.trim();
 }
 
@@ -153,9 +161,9 @@ function seededRandom(seed) {
   };
 }
 
-function makeTraffic({ rps }) {
+function makeTraffic({ rps, couponShare = COUPON_SHARE }) {
   const random = seededRandom(SEED);
-  const stats = { requests: 0, byStatus: new Map(), byVariation: new Map(), flaggedCouponFailures: 0, flaggedCouponFailureAtMs: null };
+  const stats = { requests: 0, byStatus: new Map(), byVariation: new Map(), flaggedCouponFailures: 0, flaggedCouponFailureAtMs: null, couponCarts: 0, couponCartsNewCheckout: 0 };
   const state = { couponsOn: false };
   const inFlight = new Set();
   let timer = null;
@@ -167,7 +175,7 @@ function makeTraffic({ rps }) {
       sku: `SKU-${String(1 + Math.floor(random() * 40)).padStart(4, '0')}`,
       qty: 1 + Math.floor(random() * 3),
     }));
-    const wantsCoupon = random() < COUPON_SHARE;
+    const wantsCoupon = random() < couponShare;
     return { userId, items, coupon: state.couponsOn && wantsCoupon ? COUPON : null };
   }
 
@@ -195,6 +203,10 @@ function makeTraffic({ rps }) {
     }
     count(stats.byStatus, status);
     count(stats.byVariation, variation);
+    if (cart.coupon) {
+      stats.couponCarts++;
+      if (variation === 'v2') stats.couponCartsNewCheckout++;
+    }
     if (status === '500' && variation === 'v2' && cart.coupon) {
       stats.flaggedCouponFailures++;
       if (stats.flaggedCouponFailures === FLAGGED_FAILURES_BEFORE_WATCH) stats.flaggedCouponFailureAtMs = Date.now();
@@ -229,6 +241,98 @@ function summary(name, stats, seconds) {
 }
 
 // ---------------------------------------------------------------- scenarios
+
+// ---------------------------------------------------------------- faults for the outage scenarios
+
+const PROXY_API = process.env.TOXIPROXY_URL ?? 'http://127.0.0.1:8474';
+const FLAKY_SHARE = 0.35;
+
+/** Stops and starts one compose service, and checks with Docker that it really was down in between. */
+function serviceFault(service, checks) {
+  const record = { service, stoppedAt: null, stoppedRunning: null, startedAt: null, startedRunning: null };
+  checks.services = [...(checks.services ?? []), record];
+  const running = async () => {
+    const id = await compose('ps', '-aq', service);
+    const { stdout } = await run('docker', ['inspect', '--format', '{{.State.Running}}', id]);
+    return stdout.trim() === 'true';
+  };
+  return {
+    async stop() {
+      await compose('stop', service);
+      record.stoppedAt = Date.now();
+      record.stoppedRunning = await running();
+    },
+    async start() {
+      await compose('start', service);
+      await waitUntilHealthy(service);
+      record.startedAt = Date.now();
+      record.startedRunning = await running();
+    },
+    // The restore in `finally`: start it if it is not running, whatever happened.
+    async restore() {
+      if (!(await running())) await compose('start', service);
+    },
+  };
+}
+
+/** Makes a share of new database connections fail at the fault proxy, and checks the proxy's own list of toxics. */
+function proxyFault(checks) {
+  const record = { toxic: 'reset_peer', toxicity: FLAKY_SHARE, addedAt: null, listedWhileOn: null, removedAt: null, listedAfter: null };
+  checks.proxy = record;
+  const call = async (method, path, body) => {
+    const res = await fetch(`${PROXY_API}${path}`, { method, headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    if (!res.ok) throw new Error(`The fault proxy answered ${res.status} to ${method} ${path}`);
+    return res.status === 204 ? null : res.json();
+  };
+  const names = async () => (await call('GET', '/proxies/shop-db/toxics')).map((t) => t.name);
+  return {
+    async add() {
+      await call('POST', '/proxies/shop-db/toxics', { name: 'flaky', type: 'reset_peer', stream: 'downstream', toxicity: FLAKY_SHARE, attributes: { timeout: 0 } });
+      record.addedAt = Date.now();
+      record.listedWhileOn = (await names()).includes('flaky');
+    },
+    async remove() {
+      await call('DELETE', '/proxies/shop-db/toxics/flaky');
+      record.removedAt = Date.now();
+      record.listedAfter = (await names()).includes('flaky');
+    },
+    async restore() {
+      if ((await names().catch(() => [])).includes('flaky')) await call('DELETE', '/proxies/shop-db/toxics/flaky').catch(() => undefined);
+    },
+  };
+}
+
+const at = (started, ms) => sleep(Math.max(0, started + ms - Date.now()));
+
+/** A scenario that stops a compose service from +1:30 to +3:00, with an optional coupon bug from +1:30 to the end. */
+function serviceStop(service, { record, minutes, rps, couponShare, label = `${service} service` }) {
+  const faults = [];
+  return {
+    record,
+    minutes,
+    ...(rps ? { rps } : {}),
+    ...(couponShare ? { couponShare } : {}),
+    async script({ world, traffic, totalMs, checks }) {
+      const fault = serviceFault(service, checks);
+      faults.push(fault);
+      const started = Date.now();
+      await at(started, 90_000);
+      if (couponShare) {
+        traffic.state.couponsOn = true;
+        await world(`Carts with the SAVE10 coupon began (about 1 in ${Math.round(1 / couponShare)}).`);
+      }
+      await world(`The ${label} was stopped.`);
+      await fault.stop();
+      await at(started, 180_000);
+      await fault.start();
+      await world(`The ${label} was started again.`);
+      await at(started, totalMs);
+    },
+    async cleanup() {
+      for (const fault of faults) await fault.restore();
+    },
+  };
+}
 
 /**
  * Each scenario gets the traffic controller, the world logger and its total length, and runs its script.
@@ -288,36 +392,118 @@ const scenarios = {
       await unlimitShopCpu();
     },
   },
+
+  // ---- the outage scenarios of runs/outage-scenarios/PLAN.md (they need deploy/docker-compose.downstream.yml)
+
+  'shared-service-outage': serviceStop('tax', {
+    record: { name: 'shared-service-outage', title: 'A shared service outage', planted: 'The tax service, which both checkouts call, was stopped for 90 seconds. Nothing was wrong with the new checkout.' },
+    minutes: 5,
+  }),
+
+  'feature-service-outage': serviceStop('rules', {
+    record: { name: 'feature-service-outage', title: 'An outage of a service only the feature calls', planted: 'The rules service, which only the new checkout calls, was stopped for 90 seconds. Nothing was wrong with the new checkout.' },
+    minutes: 5,
+  }),
+
+  'shared-service-outage-low-traffic': serviceStop('tax', {
+    record: { name: 'shared-service-outage-low-traffic', title: 'A shared service outage at low traffic', planted: 'The tax service was stopped for 90 seconds, at 1 request a second. Nothing was wrong with the new checkout.' },
+    minutes: 5,
+    rps: 1,
+  }),
+
+  'database-outage-with-bug': serviceStop('shop-db', {
+    label: "shop's database",
+    record: { name: 'database-outage-with-bug', title: 'A database outage with a bug in the feature', planted: "The shop's database was stopped for 90 seconds, and carts with the SAVE10 coupon crash inside the new checkout's own code." },
+    minutes: 7,
+    couponShare: 0.2,
+  }),
+
+  'shared-service-outage-with-bug': serviceStop('tax', {
+    record: { name: 'shared-service-outage-with-bug', title: 'A shared service outage with a bug in the feature', planted: "The tax service was stopped for 90 seconds, and carts with the SAVE10 coupon crash inside the new checkout's own code." },
+    minutes: 7,
+    couponShare: 0.2,
+  }),
+
+  'database-flaky': (() => {
+    const faults = [];
+    return {
+      record: { name: 'database-flaky', title: 'A flaky database', planted: `About ${Math.round(FLAKY_SHARE * 100)}% of the shop's database connections failed for 3 minutes. Nothing was wrong with the new checkout.` },
+      minutes: 6,
+      async script({ world, totalMs, checks }) {
+        const proxy = proxyFault(checks);
+        faults.push(proxy);
+        const started = Date.now();
+        await at(started, 90_000);
+        await world(`About ${Math.round(FLAKY_SHARE * 100)}% of the shop's database connections began to fail.`);
+        await proxy.add();
+        await at(started, 270_000);
+        await proxy.remove();
+        await world("The shop's database connections stopped failing.");
+        await at(started, totalMs);
+      },
+      async cleanup() {
+        for (const fault of faults) await fault.restore();
+      },
+    };
+  })(),
+
+  'rare-bug': {
+    record: { name: 'rare-bug', title: 'A rare bug in the feature', planted: "1 cart in 20 carries the SAVE10 coupon, which crashes inside the new checkout's own code." },
+    minutes: 12,
+    couponShare: 0.05,
+    async script({ world, traffic, totalMs }) {
+      const started = Date.now();
+      await at(started, 90_000);
+      traffic.state.couponsOn = true;
+      await world('Carts with the SAVE10 coupon began (about 1 in 20).');
+      await at(started, totalMs);
+    },
+    async cleanup() {},
+  },
+
+  healthy: {
+    record: { name: 'healthy', title: 'Nothing wrong', planted: 'Nothing was done to the shop.' },
+    minutes: 5,
+    async script({ totalMs }) {
+      await sleep(totalMs);
+    },
+    async cleanup() {},
+  },
 };
+
 
 async function runScenario(name, args) {
   const scenario = scenarios[name];
-  const rps = Number(args.rps ?? 2);
+  const rps = Number(args.rps ?? scenario.rps ?? 2);
   const minutes = Number(args.minutes ?? scenario.minutes);
   const totalMs = minutes * 60_000;
   const out = args.out ? resolve(args.out) : undefined;
   await armAlibi(scenario.record);
   console.log(`Watch it live at http://127.0.0.1:4173 (the board), Flagsmith at http://127.0.0.1:8000, traces at http://127.0.0.1:16686.`);
   const world = makeWorld(out);
-  const traffic = makeTraffic({ rps });
+  const traffic = makeTraffic({ rps, ...(scenario.couponShare ? { couponShare: scenario.couponShare } : {}) });
+  const checks = {};
 
   await world(`Run "${name}" started: ${rps} requests per second from ${IDENTITIES} shoppers.`);
   const startedAt = Date.now();
   traffic.start();
   const abort = () => {
-    scenario.cleanup().finally(() => process.exit(130));
+    scenario.cleanup({ checks }).finally(() => process.exit(130));
   };
   process.on('SIGINT', abort);
   process.on('SIGTERM', abort);
   try {
-    await scenario.script({ world, traffic, totalMs, args });
+    await scenario.script({ world, traffic, totalMs, args, checks });
   } finally {
     await traffic.stop();
-    await scenario.cleanup();
+    await scenario.cleanup({ checks });
     await world(`Run "${name}" ended.`);
     await finishAlibi();
   }
   console.log(summary(name, traffic.stats, (Date.now() - startedAt) / 1000));
+  // One line a script can read: what was done to the stack, as checked, and what was sent.
+  const { stats } = traffic;
+  console.log(`OUTCOME ${JSON.stringify({ scenario: name, rps, minutes, startedAt, endedAt: Date.now(), checks, requests: stats.requests, couponCarts: stats.couponCarts, couponCartsNewCheckout: stats.couponCartsNewCheckout, byStatus: Object.fromEntries(stats.byStatus), byVariation: Object.fromEntries(stats.byVariation) })}`);
   if (out) console.log(`World lines are in ${out}`);
 }
 
@@ -380,7 +566,7 @@ try {
   if (command === 'reset') await reset();
   else if (scenarios[command]) await runScenario(command, args);
   else {
-    console.error('Usage: node load/run.mjs <outage|coupon-bug|degraded-host|reset> [--rps 2] [--minutes N] [--out file] [--cpus 0.05]');
+    console.error('Usage: node load/run.mjs <outage|coupon-bug|degraded-host|reset|shared-service-outage|feature-service-outage|database-flaky|shared-service-outage-low-traffic|database-outage-with-bug|shared-service-outage-with-bug|rare-bug|healthy> [--rps 2] [--minutes N] [--out file] [--cpus 0.05]');
     process.exitCode = 2;
   }
 } catch (error) {
