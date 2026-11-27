@@ -36,7 +36,7 @@ describe('buildBaseline', () => {
       spanExistsInStable: true,
       flagOn: { requests: 23, failures: 3, p95Ms: 6 },
       stable: { requests: 22, failures: 2, p95Ms: 6 },
-      why: 'db.system=postgresql connect ECONNREFUSED 172.18.0.5:5432',
+      why: 'db.system.name=postgresql connect ECONNREFUSED 172.18.0.5:5432',
     });
   });
 

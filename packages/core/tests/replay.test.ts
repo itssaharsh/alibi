@@ -95,6 +95,23 @@ describe('createReplayer', () => {
   });
 });
 
+describe('stepping', () => {
+  it.each([1000, 7000, 'whole'] as const)('gives the same final state as a one-shot replay when stepped by %s', (increment) => {
+    const lines = buildRun('feature-bug');
+    const whole = replayRun(lines);
+    const replayer = createReplayer(lines);
+    if (increment !== 'whole') {
+      for (let t = replayer.header.startedAtMs; t < replayer.endsAtMs; t += increment) replayer.step(t);
+    }
+    replayer.step(replayer.endsAtMs);
+    const stepped = replayer.result();
+    expect(JSON.stringify(stepped.state)).toBe(JSON.stringify(whole.state));
+    expect(stepped.verdicts).toHaveLength(whole.verdicts.length);
+    expect(stepped.state.totals).toEqual(whole.state.totals);
+    expect(JSON.stringify(stepped.events)).toBe(JSON.stringify(whole.events));
+  });
+});
+
 describe('parseRun', () => {
   it('round trips a run file', () => {
     const lines = buildRun('outage');

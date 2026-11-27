@@ -163,7 +163,9 @@ export function createReplayer(lines: readonly RunLine[], options: ReplayOptions
       for (;;) {
         const line = body[cursor];
         if (!line && assembler.pending === 0) break;
-        if (Math.min(line ? line.atMs : Infinity, nextTick) > untilMs) break;
+        // Once the last line is in, the open traces always settle, so the final state never
+        // depends on how far the caller asked to step.
+        if (line && Math.min(line.atMs, nextTick) > untilMs) break;
         if (line && line.atMs <= nextTick) {
           cursor += 1;
           apply(line, out);

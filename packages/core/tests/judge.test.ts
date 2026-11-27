@@ -143,7 +143,7 @@ describe('dependency calls', () => {
     );
     expect(v.failureClass).toBe('server');
     expect(v.reason).toBe(
-      'Failed in pg.query:SELECT shop, a dependency call (db.system=postgresql) outside the flagged path: 42601: syntax error at or near "X". The dependency rejected the call, so the fault is in the calling code outside the flagged path. Does not count.',
+      'Failed in pg.query:SELECT shop, a dependency call (db.system.name=postgresql) outside the flagged path: 42601: syntax error at or near "X". The dependency rejected the call, so the fault is in the calling code outside the flagged path. Does not count.',
     );
   });
 

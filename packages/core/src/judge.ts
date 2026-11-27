@@ -56,19 +56,36 @@ function sentence(value: string): string {
   return value.endsWith('.') ? value : `${value}.`;
 }
 
-/** The origin span's own words for what went wrong, never a guess. */
+/**
+ * The origin span's own words for what went wrong, never a guess. The pg instrumentation records
+ * only a generic exception message with no type, so without an exception type the status message,
+ * which carries the driver's real text, comes first.
+ */
 function originMessage(span: FlatSpan): string {
   const exception = [...span.events].reverse().find((event) => event.name === 'exception');
   const type = text(exception?.attrs['exception.type']);
   const message = text(exception?.attrs['exception.message']);
+  const errorType = text(span.attrs['error.type']);
+  const status = httpStatus(span);
   let found: string | undefined;
-  if (message) {
-    found = type && !message.toLowerCase().includes(type.toLowerCase()) ? `${type}: ${message}` : message;
+  if (message && type) {
+    found = message.toLowerCase().includes(type.toLowerCase()) ? message : `${type}: ${message}`;
   } else {
-    const status = httpStatus(span);
-    found = span.statusMessage ?? type ?? text(span.attrs['error.type']) ?? (status === undefined ? undefined : `HTTP status ${status}`);
+    found =
+      span.statusMessage ??
+      message ??
+      type ??
+      // HTTP servers set error.type to the status code, which says less than the status itself.
+      (errorType && !/^\d{3}$/.test(errorType) ? errorType : undefined) ??
+      (status === undefined ? undefined : `HTTP status ${status}`);
   }
   return truncate(oneLine(found ?? 'no message recorded'));
+}
+
+/** When the span threw: its first exception event, else when it ended. */
+function failedAtMs(span: FlatSpan): number {
+  const times = span.events.filter((event) => event.name === 'exception').map((event) => event.timeMs);
+  return times.length > 0 ? Math.min(...times) : span.endMs;
 }
 
 function isDependencyCall(span: FlatSpan): boolean {
@@ -260,7 +277,8 @@ export function judgeTrace(spans: readonly FlatSpan[], config: GuardConfig): Tra
 
   let originSpans = spans.filter((span) => span.error && !hasErrorBelow.has(span.spanId));
   if (originSpans.length === 0) originSpans = [root];
-  originSpans.sort((a, b) => a.startMs - b.startMs || (a.spanId < b.spanId ? -1 : 1));
+  // The first failure leads the explanation: a timeout fires before the work it interrupted gives up.
+  originSpans.sort((a, b) => failedAtMs(a) - failedAtMs(b) || (a.spanId < b.spanId ? -1 : 1));
 
   const infos: OriginInfo[] = originSpans.map((span) => {
     const onPath = onFlaggedPath(span);

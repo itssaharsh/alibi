@@ -24,7 +24,7 @@ describe('golden explanations', () => {
     expect(v.flagOn).toBe(false);
     expect(v.counted).toBe(false);
     expect(v.reason).toBe(
-      'Failed in pg.query:SELECT shop, a dependency call (db.system=postgresql): connect ECONNREFUSED 172.18.0.5:5432. The dependency was unavailable, so this does not count.',
+      'Failed in pg.query:SELECT shop, a dependency call (db.system.name=postgresql): connect ECONNREFUSED 172.18.0.5:5432. The dependency was unavailable, so this does not count.',
     );
   });
 
@@ -34,7 +34,7 @@ describe('golden explanations', () => {
     expect(v.flagOn).toBe(true);
     expect(v.counted).toBe(false);
     expect(v.reason).toBe(
-      'Failed in pg.query:SELECT shop, a dependency call (db.system=postgresql): connect ECONNREFUSED 172.18.0.5:5432. The dependency was unavailable, so this does not count.',
+      'Failed in pg.query:SELECT shop, a dependency call (db.system.name=postgresql): connect ECONNREFUSED 172.18.0.5:5432. The dependency was unavailable, so this does not count.',
     );
   });
 
@@ -44,7 +44,7 @@ describe('golden explanations', () => {
     expect(v.origins[0]?.onFlaggedPath).toBe(true);
     expect(v.counted).toBe(false);
     expect(v.reason).toBe(
-      'Failed in pg.query:SELECT price, a dependency call (db.system=postgresql): connect ECONNREFUSED 172.18.0.5:5432. The dependency was unavailable, so this does not count. It was called from the flagged path, but an unavailable dependency is infrastructure.',
+      'Failed in pg.query:SELECT price, a dependency call (db.system.name=postgresql): connect ECONNREFUSED 172.18.0.5:5432. The dependency was unavailable, so this does not count. It was called from the flagged path, but an unavailable dependency is infrastructure.',
     );
   });
 
@@ -53,7 +53,7 @@ describe('golden explanations', () => {
     expect(v.failureClass).toBe('flagged-path');
     expect(v.counted).toBe(true);
     expect(v.reason).toBe(
-      'Failed in pg.query:SELECT price, a dependency call (db.system=postgresql) on the flagged path: 42601: syntax error at or near "FROM". The dependency rejected the call, so the fault is in the calling code. Counts toward the switch-off.',
+      'Failed in pg.query:SELECT price, a dependency call (db.system.name=postgresql) on the flagged path: 42601: syntax error at or near "FROM". The dependency rejected the call, so the fault is in the calling code. Counts toward the switch-off.',
     );
   });
 
@@ -88,7 +88,7 @@ describe('golden explanations', () => {
     expect(v.counted).toBe(false);
     expect(v.origins).toHaveLength(2);
     expect(v.reason).toBe(
-      "Failed in pg.query:SELECT shop, a dependency call (db.system=postgresql): connect ECONNREFUSED 172.18.0.5:5432, and in checkout_v2.apply_coupon, a span on the flagged path: TypeError: Cannot read properties of undefined (reading 'percent'). The failures are in different places, so this does not count.",
+      "Failed in pg.query:SELECT shop, a dependency call (db.system.name=postgresql): connect ECONNREFUSED 172.18.0.5:5432, and in checkout_v2.apply_coupon, a span on the flagged path: TypeError: Cannot read properties of undefined (reading 'percent'). The failures are in different places, so this does not count.",
     );
   });
 

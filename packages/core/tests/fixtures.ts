@@ -71,10 +71,11 @@ export function checkoutTrace(o: CheckoutOptions): FlatSpan[] {
     error: false,
   });
   const pg = (statement: string): Record<string, AttrValue> => ({
-    'db.system': 'postgresql',
-    'db.name': 'shop',
-    'db.statement': statement,
-    'net.peer.name': 'postgres',
+    'db.system.name': 'postgresql',
+    'db.namespace': 'shop',
+    'db.query.text': statement,
+    'server.address': 'shop-db',
+    'server.port': 5432,
   });
 
   const root = make(1, undefined, 'POST /checkout', 'server', 0, dur, {
@@ -82,7 +83,7 @@ export function checkoutTrace(o: CheckoutOptions): FlatSpan[] {
     'http.request.method': 'POST',
     'http.response.status_code': 200,
   });
-  const handler = make(2, 1, 'request handler - /checkout', 'internal', 1, dur - 2, { 'express.type': 'request_handler' });
+  const handler = make(2, 1, 'request handler - /checkout', 'internal', 1, dur - 2, { 'express.type': 'request_handler', 'http.route': '/checkout' });
   const tax = make(3, 2, 'tax.lookup', 'internal', 2, 2);
   const shopQuery = make(4, 2, 'pg.query:SELECT shop', 'client', 4, 6, pg('SELECT * FROM shops WHERE id = $1'));
   const spans: Record<FaultAt, FlatSpan | undefined> = {
@@ -129,7 +130,10 @@ export function checkoutTrace(o: CheckoutOptions): FlatSpan[] {
       if (ancestor !== root) ancestor.statusMessage = fault.message;
     }
   }
-  if ((o.faults ?? []).length > 0) root.attrs['http.response.status_code'] = 500;
+  if ((o.faults ?? []).length > 0) {
+    root.attrs['http.response.status_code'] = 500;
+    root.attrs['error.type'] = '500';
+  }
 
   const mode = o.evaluation ?? 'event';
   const evaluation = {
