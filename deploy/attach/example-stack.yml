@@ -1,0 +1,14 @@
+# For trying the attach setup against the example stack in deploy/docker-compose.yml, with that stack's own
+# alibi and board stopped. It joins the example's network, where "an existing Flagsmith" is called flagsmith,
+# and takes the name alibi there, which is where the example's collector sends its spans:
+#   docker compose -f docker-compose.yml -f example-stack.yml up -d --build --wait
+services:
+  alibi:
+    networks:
+      default: {}
+      example:
+        aliases: [alibi]
+networks:
+  example:
+    name: alibi_default
+    external: true

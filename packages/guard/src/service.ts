@@ -413,11 +413,13 @@ export class AlibiService {
       .then(() => {
         if (generation !== this.generation) return;
         this.health = { posts: this.health.posts + 1, lastPostedAtMs: this.clock.now() };
+        this.note({ kind: 'flagsmith', atMs: this.stamp(), what: 'feature-health', ok: true, detail: label ? `marked unhealthy, with the label: ${label}` : 'marked unhealthy after the switch-off', data: { textBlocks } });
       })
       .catch((error: unknown) => {
         if (generation !== this.generation) return;
         this.health = { ...this.health, lastProblem: reasonOf(error) };
         this.log.warn(`Feature Health was not updated: ${reasonOf(error)}`);
+        this.note({ kind: 'flagsmith', atMs: this.stamp(), what: 'feature-health', ok: false, detail: reasonOf(error) });
       });
   }
 

@@ -1,7 +1,7 @@
 // Cart pricing for the two checkouts. The stable checkout is a plain sum. The new checkout (v2)
 // prices every cart line through rules computed over the whole catalogue, which is real CPU work,
 // and gives itself a time budget.
-import { inSpan } from './flagged.js';
+import { inSpan } from '@alibi/otel-helpers';
 
 export class PriceBudgetExceeded extends Error {
   constructor(elapsedMs, budgetMs) {

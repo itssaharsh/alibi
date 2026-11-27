@@ -8,10 +8,11 @@
 // For every run: `docker compose down -v`, `up -d --build --wait`, the scenario at 2 requests a second (the run arms the
 // guard and finishes it), then the guard's final /api/state and the recording are kept under
 // ~/gta-evidence/repeats/<scenario>-<n>/, and the recording is replayed through the engine.
+// Progress lines go to /tmp/repeats/progress (REPEAT_PROGRESS changes the path).
 // Output: runs/repeats/summary.json (one object per run) and runs/repeats/README.md (a table). The full run files
 // stay in ~/gta-evidence/repeats and are not meant for the repository.
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +26,7 @@ const FLAGSMITH = process.env.FLAGSMITH_URL ?? 'http://127.0.0.1:8000';
 const OUT = join(ROOT, 'runs', 'repeats');
 const EVIDENCE = join(homedir(), 'gta-evidence', 'repeats');
 const SCENARIOS = { outage: 'outage', 'coupon-bug': 'coupon-bug', 'degraded-host': 'slow-host' };
+const PROGRESS = process.env.REPEAT_PROGRESS ?? '/tmp/repeats/progress';
 const WINDOW_MS = 60_000;
 const MIN_PER_ARM = 10;
 
@@ -169,6 +171,12 @@ export function markdown(rows) {
   return out.join('\n');
 }
 
+/** One line per finished run, for whoever is waiting: `finished <scenario> <n>`, and `all-done` at the end. */
+function progress(line) {
+  mkdirSync(dirname(PROGRESS), { recursive: true });
+  appendFileSync(PROGRESS, `${line}\n`);
+}
+
 function save(rows) {
   mkdirSync(OUT, { recursive: true });
   writeFileSync(join(OUT, 'summary.json'), `${JSON.stringify(rows, null, 2)}\n`);
@@ -194,8 +202,10 @@ async function main() {
       console.log(`${new Date().toISOString()} ${scenario} run ${i} of ${n}`);
       rows.push(await oneRun(scenario, i, engine));
       save(rows);
+      progress(`finished ${scenario} ${i}`);
     }
   }
+  progress('all-done');
   console.log(`Done: ${rows.length} runs in ${OUT}`);
 }
 

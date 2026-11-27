@@ -41,6 +41,23 @@ describe('Flagsmith Feature Health', () => {
     expect(h.service.state().flagsmith.featureHealth).toMatchObject({ posts: 2 });
   });
 
+  it('writes each post to the run file', async () => {
+    const dir = (await import('./helpers.js')).tempDir();
+    const file = `${dir}/run.jsonl`;
+    h = harness(fake, START, { FLAGSMITH_FEATURE_HEALTH_URL: `http://flagsmith:8000/api/v1/feature-health/${HEALTH_TOKEN}`, ALIBI_RECORD: file }, dir);
+    await h.service.start();
+    await play(h, buildRun('feature-bug'));
+    await h.clock.advanceBy(5000);
+    await h.service.stop();
+    const { readFileSync } = await import('node:fs');
+    const text = readFileSync(file, 'utf8');
+    const lines = text.trim().split('\n').map((line) => JSON.parse(line) as Record<string, any>).filter((line) => line.what === 'feature-health');
+    expect(lines).toHaveLength(2);
+    expect(lines.every((line) => line.ok)).toBe(true);
+    expect(lines[1]?.detail).toBe('marked unhealthy, with the label: probably the feature');
+    expect(text).not.toContain(HEALTH_TOKEN);
+  });
+
   it('never posts when the flag stays on', async () => {
     h = withHealth();
     await h.service.start();

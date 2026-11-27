@@ -20,7 +20,23 @@ cp .env.example .env      # fill in the six values at the top
 docker compose up -d --build --wait
 ```
 
-Alibi is on port 4319 and the board on http://127.0.0.1:4173. If your Flagsmith runs in another Compose project, make it reachable from the `alibi` container (join that project's network in a `docker-compose.override.yml`, or use an address the container can reach).
+Alibi is on port 4319 and the board on http://127.0.0.1:4173 (`ALIBI_BOARD_PORT` changes the board's port). Alibi reaches your Flagsmith at `FLAGSMITH_API_URL`, so that address must work from inside the container: a public address, or the Flagsmith container's name when both are on one Docker network.
+
+### Try it against the example stack
+
+To see this setup work without a Flagsmith of your own, use the example stack's Flagsmith as "an existing Flagsmith". Start the example (`docker compose -f deploy/docker-compose.yml up -d --build --wait` from the repository root), then stop its own Alibi and board, and start this one on the example's network:
+
+```bash
+docker compose -f deploy/docker-compose.yml stop alibi board
+cd deploy/attach
+# .env: FLAGSMITH_API_URL=http://flagsmith:8000, the environment key and master key from
+# deploy/data/shared/flagsmith.json (environmentKey, masterKey), FLAGSMITH_EXPERIMENT_ID (experimentId),
+# ALIBI_FLAG=checkout_v2, ALIBI_STABLE_VARIATION=stable
+docker compose -f docker-compose.yml -f example-stack.yml up -d --build --wait
+node ../../load/run.mjs coupon-bug
+```
+
+`example-stack.yml` joins the example's network and gives this Alibi the name `alibi` there, which is where the example's collector already sends its spans. About two and a half minutes into the run the board shows the switch-off and the confirmation. Use `node load/run.mjs reset` before a second run.
 
 ## Point your collector at it
 
