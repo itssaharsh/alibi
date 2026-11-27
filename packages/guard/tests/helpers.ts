@@ -75,18 +75,19 @@ interface Reply {
 export class FakeFlagsmith {
   server: Server;
   url = '';
-  enabled = true;
+  /** True once the experiment's rollout has been set to 0%. */
+  rolloutZero = false;
   /** Close every connection without answering. */
   down = false;
   /** Statuses to answer the next event posts with, one each, before accepting. */
   eventFailures: number[] = [];
-  /** How many feature state updates to refuse with 503 before accepting. */
+  /** How many rollout updates to refuse with 503 before accepting. */
   patchFailures = 0;
-  /** Keep serving the new version after the update, as if the update did not take hold. */
+  /** Keep serving the new version after the rollout update, as if the update did not take hold. */
   patchHasNoEffect = false;
   /** Answer the next refreshes with 429, one entry (seconds to wait) per refresh. */
   limits: number[] = [];
-  /** Answer feature state updates with 403 and a message that repeats the admin key. */
+  /** Answer rollout updates with 403 and a message that repeats the admin key. */
   leakKey = false;
   readonly events: Record<string, unknown>[] = [];
   readonly eventBodies: unknown[] = [];
@@ -94,6 +95,7 @@ export class FakeFlagsmith {
   readonly headers: IncomingMessage['headers'][] = [];
   refreshes = 0;
   patches = 0;
+  readonly rollouts: Record<string, unknown>[] = [];
   /** Variation shares in the results the fake returns. */
   exposed = { stable: 300, v2: 310 };
 
@@ -158,23 +160,38 @@ export class FakeFlagsmith {
       if (!sdk) return { status: 403, body: { detail: 'Invalid or missing Environment key' } };
       const id = url.searchParams.get('identifier') ?? '';
       const hash = [...id].reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-      const value = this.enabled || this.patchHasNoEffect ? (hash % 2 === 0 ? 'v2' : 'stable') : 'stable';
-      const on = this.enabled || this.patchHasNoEffect;
-      return { status: 200, body: { identifier: id, flags: [{ feature: { id: 3, name: 'checkout_v2' }, enabled: on, feature_state_value: value }] } };
+      const value = !this.rolloutZero || this.patchHasNoEffect ? (hash % 2 === 0 ? 'v2' : 'stable') : 'stable';
+      return { status: 200, body: { identifier: id, flags: [{ feature: { id: 3, name: 'checkout_v2' }, enabled: true, feature_state_value: value }] } };
     }
     if (!admin) return { status: 403, body: { detail: 'Authentication credentials were not provided.' } };
-    if (path === `${env}/featurestates/` && method === 'GET') {
-      return { status: 200, body: { count: 1, results: [{ id: 7, feature: 3, enabled: this.enabled, identity: null, feature_segment: null }] } };
+    if (path === `${env}/experiments/1/` && method === 'GET') {
+      return {
+        status: 200,
+        body: {
+          id: 1,
+          status: 'running',
+          experiment_rollout: {
+            enabled: true,
+            rollout_percentage: this.rolloutZero ? 0 : 100,
+            feature_state_value: { type: 'string', value: 'stable' },
+            multivariate_feature_state_values: [{ multivariate_feature_option: 1, percentage_allocation: 50 }],
+            audience: { match: 'any', segments: [] },
+          },
+        },
+      };
     }
-    if (path === `${env}/featurestates/7/` && method === 'PATCH') {
+    if (path === `${env}/experiments/1/rollout/` && method === 'PATCH') {
       if (this.leakKey) return { status: 403, body: { detail: `Invalid key ${ADMIN_KEY} for ${ENV_KEY}` } };
       if (this.patchFailures > 0) {
         this.patchFailures -= 1;
         return { status: 503, body: { detail: 'unavailable' } };
       }
+      const sent = body as Record<string, unknown>;
+      if (!sent.feature_state_value || !sent.multivariate_feature_state_values || sent.enabled !== true) return { status: 400, body: { detail: 'partial body' } };
       this.patches += 1;
-      this.enabled = (body as { enabled: boolean }).enabled;
-      return { status: 200, body: { id: 7, feature: 3, enabled: this.enabled } };
+      this.rolloutZero = sent.rollout_percentage === 0;
+      this.rollouts.push(sent);
+      return { status: 200, body: sent };
     }
     if (path === `${env}/experiments/1/results/refresh/` && method === 'POST') {
       const seconds = this.limits.shift();
@@ -239,7 +256,6 @@ export function envFor(fake: FakeFlagsmith, dir: string, extra: Record<string, s
     FLAGSMITH_API_URL: `${fake.url}/api/v1/`,
     FLAGSMITH_ENVIRONMENT_KEY: ENV_KEY,
     FLAGSMITH_ADMIN_KEY: ADMIN_KEY,
-    FLAGSMITH_FEATURE_ID: '3',
     FLAGSMITH_EXPERIMENT_ID: '1',
     ALIBI_FLAGSMITH_FILE: join(dir, 'no-such-file.json'),
     ALIBI_DATA: join(dir, 'data'),

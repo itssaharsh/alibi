@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import type { FlagsmithExperimentSummary } from '@alibi/core';
 import type { Tracker } from './clock.js';
 import type { FlagsmithSettings, SwitchOffStrategy } from './config.js';
@@ -64,6 +65,7 @@ function networkReason(error: unknown): string {
 /** Everything the guard asks of Flagsmith, so tests and the service share one place. */
 export class FlagsmithApi {
   private metricNames: Map<number, string> | undefined;
+  private latestExperimentId: number;
 
   constructor(
     readonly settings: FlagsmithSettings,
@@ -72,6 +74,7 @@ export class FlagsmithApi {
     private readonly redact: (text: string) => string,
     private readonly tracker: Tracker,
   ) {
+    this.latestExperimentId = settings.experimentId;
     const given = Object.entries(settings.metrics);
     if (given.length > 0) this.metricNames = new Map(given.map(([name, id]) => [id, name]));
   }
@@ -166,36 +169,50 @@ export class FlagsmithApi {
     return check;
   }
 
-  /** The environment-level feature state of the guarded flag. */
-  async featureStateId(): Promise<number> {
-    const { featureId } = this.settings;
-    const filter = featureId === undefined ? `feature_name=${encodeURIComponent(this.guarded.flag)}` : `feature=${featureId}`;
-    const reply = await this.request('GET', `${this.env('featurestates/')}?${filter}`, { admin: true });
-    if (reply.status !== 200) throw this.failure('Flagsmith feature states', reply);
-    const list = Array.isArray(reply.body) ? reply.body : isRecord(reply.body) && Array.isArray(reply.body.results) ? reply.body.results : [];
-    const own = list.filter(
-      (item): item is Json =>
-        isRecord(item) &&
-        (item.identity === null || item.identity === undefined) &&
-        (item.feature_segment === null || item.feature_segment === undefined) &&
-        (featureId === undefined || item.feature === featureId),
-    );
-    const id = num(own[0]?.id);
-    if (id === undefined) throw new FlagsmithError('Flagsmith has no feature state for the flag in this environment', false);
-    return id;
+  /**
+   * The experiment to act on. The bootstrap file is read again each time, because a reset can create a new
+   * experiment; an experiment id set in the environment is never overridden.
+   */
+  async experimentId(): Promise<number> {
+    const { experimentId, experimentPinned, bootstrapFile } = this.settings;
+    if (experimentPinned) return experimentId;
+    try {
+      const fresh = (JSON.parse(await readFile(bootstrapFile, 'utf8')) as Json).experimentId;
+      if (typeof fresh === 'number') this.latestExperimentId = fresh;
+    } catch {
+      // the file is unreadable for a moment: keep the last id that was known
+    }
+    return this.latestExperimentId;
   }
 
-  async disableFeatureState(id: number): Promise<void> {
-    const reply = await this.request('PATCH', this.env(`featurestates/${id}/`), { admin: true, body: { enabled: false } });
-    if (reply.status !== 200) throw this.failure('Flagsmith feature state update', reply);
-    if (!isRecord(reply.body) || reply.body.enabled !== false) {
-      throw new FlagsmithError('Flagsmith answered the update but the flag is not shown as off', false);
+  /**
+   * Sets the experiment's rollout to 0%, so every identity is served the stable value while the experiment keeps
+   * running. Flagsmith wants the whole rollout in the update, so the current one is read first and sent back with
+   * only the percentage changed.
+   */
+  async setRolloutToZero(): Promise<void> {
+    const path = this.env(`experiments/${await this.experimentId()}/`);
+    const current = await this.request('GET', path, { admin: true });
+    if (current.status !== 200) throw this.failure('Flagsmith experiment', current);
+    const rollout = isRecord(current.body) && isRecord(current.body.experiment_rollout) ? current.body.experiment_rollout : undefined;
+    if (!rollout || !isRecord(rollout.feature_state_value) || !Array.isArray(rollout.multivariate_feature_state_values)) {
+      throw new FlagsmithError('Flagsmith did not return the experiment rollout', false);
     }
+    const reply = await this.request('PATCH', `${path}rollout/`, {
+      admin: true,
+      body: {
+        enabled: true,
+        rollout_percentage: 0,
+        feature_state_value: rollout.feature_state_value,
+        multivariate_feature_state_values: rollout.multivariate_feature_state_values,
+      },
+    });
+    if (reply.status !== 200) throw this.failure('Flagsmith rollout update', reply);
   }
 
   /** Asks Flagsmith to recompute the experiment's numbers. It allows one refresh per 300 seconds. */
   async refreshResults(): Promise<RefreshOutcome> {
-    const experiment = this.settings.experimentId;
+    const experiment = await this.experimentId();
     const reply = await this.request('POST', this.env(`experiments/${experiment}/results/refresh/`), { admin: true });
     if (reply.status === 429) {
       const seconds = /(\d+)\s*seconds/.exec(isRecord(reply.body) && typeof reply.body.detail === 'string' ? reply.body.detail : '');
@@ -207,7 +224,7 @@ export class FlagsmithApi {
 
   /** Reads the experiment's results. `fresh` is false while Flagsmith has not yet finished the refresh. */
   async readResults(readAtMs: number): Promise<{ summary: FlagsmithExperimentSummary; fresh: boolean }> {
-    const experiment = this.settings.experimentId as number;
+    const experiment = await this.experimentId();
     const reply = await this.request('GET', this.env(`experiments/${experiment}/results/`), { admin: true });
     if (reply.status !== 200) throw this.failure('Flagsmith results', reply);
     const results = isRecord(reply.body) && isRecord(reply.body.results) ? reply.body.results : undefined;
@@ -297,14 +314,14 @@ export function summariseResults(
 }
 
 const strategies: Record<SwitchOffStrategy, (api: FlagsmithApi) => Promise<string>> = {
-  /** Turns the flag's own feature state off in the environment: the SDK then serves every identity the default. */
-  async 'disable-feature'(api) {
-    await api.disableFeatureState(await api.featureStateId());
-    return 'the feature state was disabled';
+  /** Setting the experiment's rollout to 0% is what makes every identity evaluate to the stable value. */
+  async 'rollout-zero'(api) {
+    await api.setRolloutToZero();
+    return 'rollout set to 0%';
   },
 };
 
-/** Switches the guarded flag off, by the way `ALIBI_SWITCH_OFF` names. Returns what was done, in words. */
+/** Switches the guarded flag off, by the way `ALIBI_SWITCH_OFF` names. Returns what was done, in a few words. */
 export function switchFlagOff(api: FlagsmithApi): Promise<string> {
   return strategies[api.settings.switchOff](api);
 }

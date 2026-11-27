@@ -93,13 +93,4 @@ describe("Flagsmith's own numbers", () => {
     expect(fake.refreshes).toBe(3);
     expect(Math.abs((record().flagsmith?.readAtMs as number) - (h.service.state().state.switchedOffAtMs as number))).toBeLessThanOrEqual(1);
   });
-
-  it('is not read when the experiment id is unknown', async () => {
-    await h.service.stop();
-    h = harness(fake, START, { FLAGSMITH_EXPERIMENT_ID: '' });
-    await h.service.start();
-    await play(h, buildRun('feature-bug'));
-    expect(fake.refreshes).toBe(0);
-    expect(record().flagsmith).toBeUndefined();
-  });
 });

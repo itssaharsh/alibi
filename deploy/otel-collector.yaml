@@ -28,15 +28,10 @@ exporters:
       enabled: true
       num_consumers: 1
       queue_size: 20
-  file:
-    path: /captures/traces.json
-    rotation:
-      max_megabytes: 50
-      max_backups: 2
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlp/jaeger, otlphttp/alibi, file]
+      exporters: [otlp/jaeger, otlphttp/alibi]

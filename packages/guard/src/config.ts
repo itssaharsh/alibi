@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { defaultConfig, type GuardConfig } from '@alibi/core';
 
 /** The ways of switching a flag off that this service can carry out. */
-export const SWITCH_OFF_STRATEGIES = ['disable-feature'] as const;
+export const SWITCH_OFF_STRATEGIES = ['rollout-zero'] as const;
 export type SwitchOffStrategy = (typeof SWITCH_OFF_STRATEGIES)[number];
 
 /** Names of the events sent to Flagsmith Experimentation. */
@@ -19,8 +19,11 @@ export interface FlagsmithSettings {
   environmentKey: string;
   /** The whole `Authorization` header value for the Admin API. */
   adminAuth: string;
-  featureId?: number;
-  experimentId?: number;
+  /** The experiment, from the environment or the bootstrap file as it was at start. The file is read again at each call. */
+  experimentId: number;
+  /** True when `FLAGSMITH_EXPERIMENT_ID` is set, so the file is never consulted. */
+  experimentPinned: boolean;
+  bootstrapFile: string;
   /** Metric id by metric name, as written by the bootstrap. */
   metrics: Record<string, number>;
   switchOff: SwitchOffStrategy;
@@ -123,7 +126,7 @@ export function loadConfig(env: Env, read: (path: string) => string = (path) => 
     throw new ConfigError(`FLAGSMITH_ADMIN_KEY is missing (set it or FLAGSMITH_ADMIN_TOKEN, or provide "masterKey" in ${filePath})`);
   }
 
-  const strategy = env.ALIBI_SWITCH_OFF ?? 'disable-feature';
+  const strategy = env.ALIBI_SWITCH_OFF ?? 'rollout-zero';
   if (!(SWITCH_OFF_STRATEGIES as readonly string[]).includes(strategy)) {
     throw new ConfigError(`ALIBI_SWITCH_OFF must be one of: ${SWITCH_OFF_STRATEGIES.join(', ')}`);
   }
@@ -164,8 +167,8 @@ export function loadConfig(env: Env, read: (path: string) => string = (path) => 
     for (const [name, id] of Object.entries(file.metrics)) if (typeof id === 'number') metrics[name] = id;
   }
 
-  const featureId = optionalId(env, 'FLAGSMITH_FEATURE_ID', file, 'featureId');
   const experimentId = optionalId(env, 'FLAGSMITH_EXPERIMENT_ID', file, 'experimentId');
+  if (experimentId === undefined) throw new ConfigError(`FLAGSMITH_EXPERIMENT_ID is missing (set it, or provide "experimentId" in ${filePath})`);
   const controlToken = env.ALIBI_CONTROL_TOKEN === '' ? undefined : env.ALIBI_CONTROL_TOKEN;
   const name = env.ALIBI_RUN_NAME ?? 'live';
 
@@ -173,12 +176,13 @@ export function loadConfig(env: Env, read: (path: string) => string = (path) => 
     apiRoot: apiRootOf(apiUrl),
     environmentKey,
     adminAuth: adminKey ? `Api-Key ${adminKey}` : `Token ${adminToken ?? ''}`,
+    experimentId,
+    experimentPinned: env.FLAGSMITH_EXPERIMENT_ID !== undefined && env.FLAGSMITH_EXPERIMENT_ID !== '',
+    bootstrapFile: filePath,
     metrics,
     switchOff: strategy as SwitchOffStrategy,
     checkIdentities: env.ALIBI_CHECK_IDENTITIES === undefined ? 20 : whole('ALIBI_CHECK_IDENTITIES', env.ALIBI_CHECK_IDENTITIES),
   };
-  if (featureId !== undefined) flagsmith.featureId = featureId;
-  if (experimentId !== undefined) flagsmith.experimentId = experimentId;
 
   const secrets = [environmentKey, adminKey, adminToken, controlToken, pick('FLAGSMITH_SERVER_KEY', 'serverKey')].filter(
     (secret): secret is string => typeof secret === 'string' && secret !== '',

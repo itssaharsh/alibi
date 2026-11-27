@@ -21,14 +21,13 @@ Flagsmith settings come from these variables or from the bootstrap file (`ALIBI_
 |---|---|---|
 | `PORT` | `4319` | Port to listen on. |
 | `ALIBI_DATA` | `./data` | Where `state.json`, `verdicts.jsonl` and `records/` are written. |
-| `ALIBI_FLAGSMITH_FILE` | `/shared/flagsmith.json` | Bootstrap file. Fields read: `internalUrl` (or `url`), `environmentKey`, `masterKey`, `flag`, `stableVariation`, `featureId`, `experimentId`, `metrics` (metric name to id), `serverKey` (only to keep it out of logs). |
+| `ALIBI_FLAGSMITH_FILE` | `/shared/flagsmith.json` | Bootstrap file. Fields read: `internalUrl` (or `url`), `environmentKey`, `masterKey`, `flag`, `stableVariation`, `experimentId`, `metrics` (metric name to id), `serverKey` (only to keep it out of logs). |
 | `FLAGSMITH_API_URL` | file `internalUrl` | Flagsmith address. `http://host:8000`, `.../api` and `.../api/v1/` all work. |
 | `FLAGSMITH_ENVIRONMENT_KEY` | file `environmentKey` | Environment key: sends events and evaluates identities. Required. |
 | `FLAGSMITH_ADMIN_KEY` | file `masterKey` | Master API key for the Admin API (`Authorization: Api-Key`). |
 | `FLAGSMITH_ADMIN_TOKEN` | none | A user token (`Authorization: Token`), used when there is no admin key. One of the two is required. |
-| `FLAGSMITH_FEATURE_ID` | file `featureId` | Feature id; without it the flag is found by name. |
-| `FLAGSMITH_EXPERIMENT_ID` | file `experimentId` | Experiment whose results go in the record; without it they are skipped. |
-| `ALIBI_SWITCH_OFF` | `disable-feature` | How the flag is switched off. Only `disable-feature` exists so far. |
+| `FLAGSMITH_EXPERIMENT_ID` | file `experimentId` | The experiment to switch off and to read results from. Required. When unset it is read from the bootstrap file again at each call, because a reset can create a new experiment. |
+| `ALIBI_SWITCH_OFF` | `rollout-zero` | How the flag is switched off: the experiment's rollout is set to 0%, so every identity gets the stable value and the experiment keeps running. |
 | `ALIBI_CHECK_IDENTITIES` | `20` | How many identities are evaluated to confirm a switch-off. |
 | `ALIBI_RULES` | none | JSON rule file: `flag`, `stableVariation`, `threshold`, `watchMs`, `tolerance`, `plainRule`, `events` (`exposure`, `completed`, `failure`, `latency`). |
 | `ALIBI_FLAG`, `ALIBI_STABLE_VARIATION`, `ALIBI_THRESHOLD`, `ALIBI_WATCH_MS` | rule file, then bootstrap file, then `checkout_v2`, `stable`, `15`, `300000` | Override single rule values. |

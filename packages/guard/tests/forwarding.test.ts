@@ -37,7 +37,7 @@ describe('forwarding to Flagsmith Experimentation', () => {
     expect(by('di')).toEqual(['$flag_exposure', 'checkout_completed', 'checkout_latency_ms']);
 
     const exposure = fake.events.find((e) => e.identifier === 'ann' && e.event === '$flag_exposure');
-    expect(exposure).toEqual({ event: '$flag_exposure', identifier: 'ann', feature_name: 'checkout_v2', value: 'v2', timestamp: START + 120, metadata: { experiment_id: 1 } });
+    expect(exposure).toEqual({ event: '$flag_exposure', identifier: 'ann', feature_name: 'checkout_v2', value: 'v2', timestamp: START + 120 });
     const latency = fake.events.find((e) => e.identifier === 'ann' && e.event === 'checkout_latency_ms');
     expect(latency).toMatchObject({ value: 120, timestamp: START + 120 });
     expect(fake.events.find((e) => e.identifier === 'di' && e.event === '$flag_exposure')).toMatchObject({ value: 'stable' });

@@ -22,6 +22,7 @@ x-flagsmith: &flagsmith
 volumes:
   flagsmith-pgdata:
   shop-pgdata:
+  alibi-data:
 
 services:
   secrets:
@@ -134,11 +135,30 @@ services:
     command: ['--config=/etc/otelcol/config.yaml']
     volumes:
       - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
-      - ./data/captures:/captures
     mem_limit: 384m
     depends_on:
       jaeger:
         condition: service_healthy
+      alibi:
+        condition: service_healthy
+
+  alibi:
+    build:
+      context: ..
+      dockerfile: packages/guard/Dockerfile
+    restart: unless-stopped
+    environment:
+      ALIBI_DATA: /data
+      ALIBI_RECORD_DIR: /data/runs
+    volumes:
+      - ./data/shared:/shared:ro
+      - alibi-data:/data
+    ports:
+      - 127.0.0.1:4319:4319
+    mem_limit: 256m
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
 
   shop-db:
     image: postgres:15.5-alpine

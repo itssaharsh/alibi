@@ -23,7 +23,7 @@ describe('secrets', () => {
   it('never reach a log line, a response, the state, a run file or a record', async () => {
     const dir = tempDir();
     const file = join(dir, 'runs', 'secret.jsonl');
-    h = harness(fake, START, { ALIBI_RECORD: file, ALIBI_CONTROL_TOKEN: CONTROL_TOKEN, ALIBI_SWITCH_OFF: 'disable-feature' }, dir);
+    h = harness(fake, START, { ALIBI_RECORD: file, ALIBI_CONTROL_TOKEN: CONTROL_TOKEN, ALIBI_SWITCH_OFF: 'rollout-zero' }, dir);
     await h.service.start();
     const api = await listen(h);
 

@@ -19,18 +19,19 @@ afterEach(async () => {
 });
 
 describe('the switch-off', () => {
-  it('disables the feature state once and confirms with 20 identities', async () => {
+  it('sets the rollout to 0% once and confirms with 20 identities', async () => {
     feedCrossing(h);
     await h.clock.advanceBy(3000);
     const view = h.service.state();
     expect(fake.patches).toBe(1);
-    expect(fake.enabled).toBe(false);
+    expect(fake.rolloutZero).toBe(true);
+    expect(fake.rollouts[0]).toEqual({ enabled: true, rollout_percentage: 0, feature_state_value: { type: 'string', value: 'stable' }, multivariate_feature_state_values: [{ multivariate_feature_option: 1, percentage_allocation: 50 }] });
     expect(fake.count('GET /api/v1/identities/')).toBe(20);
     expect(view.state.phase).toBe('watching');
     expect(view.flagsmith.switchOff).toEqual({
       requested: true,
       confirmed: true,
-      detail: 'checkout_v2 is off in Flagsmith; 20 of 20 identities checked get stable',
+      detail: 'checkout_v2 rollout set to 0% in Flagsmith; 20 of 20 identities checked get stable',
     });
     expect(view.timeline.map((e) => e.text)).toContain('Flagsmith check passed: 20 of 20 identities checked get stable');
   });

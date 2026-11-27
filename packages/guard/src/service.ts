@@ -340,7 +340,6 @@ export class AlibiService {
     if (identifier === '' || !verdict.evaluation) return [];
     const names = this.config.events;
     const timestamp = Math.round(verdict.endMs);
-    const { experimentId } = this.config.flagsmith;
     const out: FlagsmithEvent[] = [
       {
         event: names.exposure,
@@ -348,7 +347,6 @@ export class AlibiService {
         feature_name: verdict.evaluation.flag,
         value: verdict.evaluation.variation,
         timestamp,
-        ...(experimentId === undefined ? {} : { metadata: { experiment_id: experimentId } }),
       },
     ];
     if (!verdict.failed) out.push({ event: names.completed, identifier, timestamp, value: 1 });
@@ -440,12 +438,13 @@ export class AlibiService {
   private async runSwitchOff(generation: number): Promise<void> {
     const { flag, stableVariation } = this.config.guard;
     let patched = false;
+    let done = '';
     let badChecks = 0;
     for (let attempt = 0; generation === this.generation && this.guard.switchOffRequested; attempt += 1) {
       let reason: string;
       try {
         if (!patched) {
-          const done = await switchFlagOff(this.api);
+          done = await switchFlagOff(this.api);
           patched = true;
           this.log.info(`switch-off requested for ${flag}: ${done}`);
         }
@@ -457,7 +456,7 @@ export class AlibiService {
         this.addTimeline({ atMs: now, text: `Flagsmith check ${passed ? 'passed' : 'failed'}: ${summary}` });
         this.note({ kind: 'flagsmith', atMs: now, what: 'evaluation-check', ok: passed, detail: summary, data: { checked: check.checked, stable: check.stable, notStable: check.notStable } });
         if (passed) {
-          const detail = `${flag} is off in Flagsmith; ${summary}`;
+          const detail = `${flag} ${done} in Flagsmith; ${summary}`;
           this.note({ kind: 'flagsmith', atMs: now, what: 'switch-off', ok: true, detail });
           this.emit(this.guard.confirmSwitchOff(now, true, detail));
           void this.readResults('switch-off');
@@ -494,7 +493,6 @@ export class AlibiService {
       if (reason === 'watch-end') this.endReadPending = false;
       this.schedulePersist();
     };
-    if (this.config.flagsmith.experimentId === undefined) return finish();
     const now = this.clock.now();
     if (this.nextRefreshAtMs !== undefined && now < this.nextRefreshAtMs) {
       if (reason === 'switch-off') return;
