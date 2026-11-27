@@ -79,4 +79,25 @@ for (const name of files) {
 
 writeFileSync(join(out, 'index.json'), JSON.stringify({ runs, default: runs.find((r) => r.name === 'outage')?.name ?? runs[0]?.name ?? '' }));
 writeFileSync(join(web, 'public', 'probe.json'), JSON.stringify(probe ?? { decision: 'no run' }));
+// The demo video is optional: when public/alibi-demo.mp4 exists the page shows a link and a player, otherwise neither.
+const publicDir = join(web, 'public');
+const videoFile = join(publicDir, 'alibi-demo.mp4');
+const videoJson = join(publicDir, 'video.json');
+if (existsSync(videoFile)) {
+  const meta = existsSync(join(publicDir, 'video.meta.json')) ? (JSON.parse(readFileSync(join(publicDir, 'video.meta.json'), 'utf8')) as { seconds?: number }) : {};
+  const seconds = Number(process.env.ALIBI_VIDEO_SECONDS) > 0 ? Number(process.env.ALIBI_VIDEO_SECONDS) : meta.seconds;
+  writeFileSync(
+    videoJson,
+    JSON.stringify({
+      file: 'alibi-demo.mp4',
+      ...(existsSync(join(publicDir, 'alibi-demo-poster.jpg')) ? { poster: 'alibi-demo-poster.jpg' } : {}),
+      ...(existsSync(join(publicDir, 'alibi-demo.vtt')) ? { captions: 'alibi-demo.vtt' } : {}),
+      ...(seconds ? { seconds } : {}),
+    }),
+  );
+  console.log(`demo video found${seconds ? `, ${seconds} s` : ', no duration given'}`);
+} else {
+  rmSync(videoJson, { force: true });
+}
+
 console.log(`prepared ${runs.length} runs: ${runs.map((r) => `${r.name} (${(r.size / 1e6).toFixed(1)} MB)`).join(', ')}`);

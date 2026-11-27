@@ -97,7 +97,8 @@ export function Board({ board, ctl, selected, onPick, calm, record, skeleton }: 
           </span>
         </div>
         <span className="muted small" role="status">
-          {board.meta.title}, {board.meta.name === 'live' ? 'live' : runState.toLowerCase()}
+          {board.meta.title}
+          {board.meta.name === 'live' ? (/\blive\b/i.test(board.meta.title) ? '' : ', live') : `, ${runState.toLowerCase()}`}
           {board.meta.name === 'live'
             ? board.liveRate
               ? `, ${board.liveRate.requests} requests in the last second`

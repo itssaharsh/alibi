@@ -7,6 +7,8 @@ import { lowerFirst } from './lib/format';
 import { REPO_URL } from './lib/copy';
 import { Board } from './components/Board';
 import { WordsUsed } from './components/Gloss';
+import { Demo, DemoLink } from './components/Demo';
+import { loadVideo, type Video } from './lib/video';
 import { AuthorRule, Footer, FailingAndTrace, FlagsmithNumbers, PlugIn, Record, VerdictCard, WatchBand } from './components/Sections';
 
 export interface Selected {
@@ -20,6 +22,10 @@ export function App() {
   const params = useMemo(() => readParams(location.search), []);
   const ctl = useBoard(params);
   const { board, index, mode } = ctl;
+  const [video, setVideo] = useState<Video>();
+  useEffect(() => {
+    if (!params.record) void loadVideo().then(setVideo);
+  }, [params.record]);
   // The open request is derived from the board in front of the person, never stored across sources: a pick made by
   // hand wins; otherwise the first counted failure, or the newest failure while none counted; a recorded run's
   // first screen opens on the failure its summary carries. Spans are kept per source and run.
@@ -120,6 +126,11 @@ export function App() {
                       {r.title}
                     </button>
                   ))}
+                  {video ? <DemoLink video={video} /> : null}
+                </div>
+              ) : video && !params.record ? (
+                <div className="try">
+                  <DemoLink video={video} />
                 </div>
               ) : null}
               {board ? <WatchBand board={board} /> : null}
@@ -140,6 +151,7 @@ export function App() {
               <FlagsmithNumbers board={board} small />
             </div>
           ) : null}
+          {video && !params.record ? <Demo video={video} /> : null}
           {mode === 'failed' ? <p className="card muted">This run did not load. Pick another run above, or reload the page.</p> : null}
           {board ? (
             <>

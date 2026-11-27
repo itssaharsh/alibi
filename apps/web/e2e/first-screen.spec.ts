@@ -95,3 +95,50 @@ test('a newcomer is helped: no "0 of 0", glosses on the lanes, plain explanation
   await expect(page.getByRole('tooltip').filter({ hasText: "The new checkout's own code, the part that runs only when the flag is on." })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Words used here' })).toContainText('Chance to win');
 });
+
+test('with no demo video file, neither the link nor the player renders', async ({ page }) => {
+  await page.route('**/video.json', (route) => route.fulfill({ status: 404, body: 'not found' }));
+  await page.goto('./');
+  await expect(page.locator('.stamp')).toBeVisible();
+  await expect(page.getByRole('link', { name: /Watch the demo/ })).toHaveCount(0);
+  await expect(page.locator('#demo')).toHaveCount(0);
+  // a server that answers every missing path with the page itself must not conjure a video either
+  await page.unroute('**/video.json');
+  await page.route('**/video.json', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>x</title>' }));
+  await page.reload();
+  await expect(page.locator('.stamp')).toBeVisible();
+  await expect(page.getByRole('link', { name: /Watch the demo/ })).toHaveCount(0);
+  await expect(page.locator('#demo')).toHaveCount(0);
+});
+
+test('with a demo video, the link and a lazy player appear and nothing is downloaded before play', async ({ page }) => {
+  const requested: string[] = [];
+  page.on('request', (r) => requested.push(r.url()));
+  await page.route('**/video.json', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ file: 'alibi-demo.mp4', poster: 'alibi-demo-poster.jpg', captions: 'alibi-demo.vtt', seconds: 152 }) }));
+  await page.goto('./');
+  const link = page.getByRole('link', { name: 'Watch the demo (2:32)' });
+  await expect(link).toBeVisible();
+  const video = page.locator('#demo video');
+  await expect(video).toHaveAttribute('preload', 'none');
+  await expect(video).toHaveAttribute('poster', /alibi-demo-poster\.jpg$/);
+  await expect(video.locator('track')).toHaveAttribute('kind', 'captions');
+  await expect(page.locator('#demo')).toContainText('The demo');
+  await link.click();
+  await expect(video).toBeInViewport();
+  expect(requested.filter((u) => u.endsWith('alibi-demo.mp4')), 'the video was fetched before play').toEqual([]);
+});
+
+test('without a known duration the link has no time, and record mode shows no video', async ({ page }) => {
+  await page.route('**/video.json', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ file: 'alibi-demo.mp4' }) }));
+  await page.goto('./');
+  await expect(page.getByRole('link', { name: 'Watch the demo', exact: true })).toBeVisible();
+  await page.goto('./?record=1');
+  await expect(page.locator('.stamp')).toBeVisible();
+  await expect(page.locator('#demo')).toHaveCount(0);
+});
+
+test('the arm comparison margin is stated once in plain words, from the run settings', async ({ page }) => {
+  await page.goto('./?run=outage');
+  const card = page.getByRole('group', { name: 'Two simpler rules, same requests' }).first();
+  await expect(card).toContainText('The arm comparison acts at a 10-point margin', { useInnerText: true });
+});

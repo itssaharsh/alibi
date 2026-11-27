@@ -7,6 +7,7 @@ import type { Controller } from '../lib/useBoard';
 import { AUTHORS_RULE, COLLECTOR_CONFIG, REPO_URL, SPAN_ATTRIBUTES } from '../lib/copy';
 import { classWords, ms, pct, ratesLine, rel, relMs, sig, simplerRules, simplerRulesShort } from '../lib/format';
 import { Gloss } from './Gloss';
+import { armMarginLine } from '../lib/format';
 import { Waterfall } from './Waterfall';
 import type { Selected } from '../App';
 
@@ -106,6 +107,11 @@ export function SimplerRules({ board, finished }: { board: BoardData; finished: 
           </span>
         </p>
       ))}
+      <p className="margin">
+        <span>
+          {armMarginLine(board.state.config)}
+        </span>
+      </p>
       <p className="alibi-line">
         <span>
           {alibi}

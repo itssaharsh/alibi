@@ -1,4 +1,4 @@
-import { describeLevel, formatMs, formatRelative, type FailureClass, type Rates } from '@alibi/core';
+import { DEFAULT_ARM_RULE, describeLevel, formatMs, formatRelative, type FailureClass, type GuardConfig, type Rates } from '@alibi/core';
 import type { Board } from './viewModel';
 
 export const rel = (board: Board, absMs: number): string => formatRelative(absMs - board.meta.startedAtMs);
@@ -86,4 +86,10 @@ export function alibiLine(board: Board, finished: boolean): string {
   if (n.mixed) parts.push(`${n.mixed} in both`);
   const rest = parts.length ? ` ${parts.join(', ').replace(/^(\d+)/, '$1 failed')}.` : '';
   return `Alibi counted ${state.counted} of ${failures}, so the flag ${finished ? 'stays' : 'is'} on.${rest}`;
+}
+
+/** The arm comparison's margin in plain words, from the run's own settings. */
+export function armMarginLine(config: GuardConfig): string {
+  const a = config.armRule ?? DEFAULT_ARM_RULE;
+  return `The arm comparison acts at a ${a.errorRatePoints}-point margin: flag-on errors must exceed stable by that many points over ${a.windowMs / 1000} seconds, with at least ${a.minRequestsPerArm} requests in each arm.`;
 }

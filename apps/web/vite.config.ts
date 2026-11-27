@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
+import { existsSync } from 'node:fs';
 
 // Where the page is served: `/` by default, `/alibi/` on GitHub Pages. Every fetch and asset goes through BASE_URL.
 const base = (process.env.ALIBI_BASE ?? '/').replace(/\/?$/, '/');
@@ -17,6 +18,13 @@ const shareTags = (): Plugin => ({
           { tag: 'meta', attrs: { property: 'og:url', content: site }, injectTo: 'head' },
           { tag: 'meta', attrs: { property: 'og:image', content: `${site}og.png` }, injectTo: 'head' },
           { tag: 'meta', attrs: { name: 'twitter:image', content: `${site}og.png` }, injectTo: 'head' },
+          // The video tags are written only when the demo file is in public/.
+          ...(existsSync(fileURLToPath(new URL('./public/alibi-demo.mp4', import.meta.url)))
+            ? [
+                { tag: 'meta', attrs: { property: 'og:video', content: `${site}alibi-demo.mp4` }, injectTo: 'head' as const },
+                { tag: 'meta', attrs: { property: 'og:video:type', content: 'video/mp4' }, injectTo: 'head' as const },
+              ]
+            : []),
         ]
       : [],
 });
