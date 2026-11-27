@@ -14,13 +14,15 @@ RUN cd apps/web && VITE_LIVE_SAME_ORIGIN=1 VITE_JAEGER_URL=http://127.0.0.1:1668
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 LABEL org.opencontainers.image.source="https://github.com/itssaharsh/alibi" org.opencontainers.image.licenses="MIT"
+# The guard this board talks to is ALIBI_GUARD_URL (the address of Alibi's port 4319 as the board's container sees it).
 # Server-sent events (/api/events) must not be buffered: buffering would hold every event until the stream ends.
-RUN cat > /etc/nginx/conf.d/default.conf <<'CONF'
+ENV ALIBI_GUARD_URL=http://alibi:4319
+RUN mkdir -p /etc/nginx/templates && cat > /etc/nginx/templates/default.conf.template <<'CONF'
 server {
   listen 4173;
   root /usr/share/nginx/html;
   location /api/ {
-    proxy_pass http://alibi:4319;
+    proxy_pass ${ALIBI_GUARD_URL};
     proxy_http_version 1.1;
     proxy_set_header Connection "";
     proxy_buffering off;

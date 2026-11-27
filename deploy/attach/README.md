@@ -22,6 +22,25 @@ This starts only Alibi and its live board. Everything else is yours: your Flagsm
 
 Optional: a Feature Health webhook (Project Settings, Feature Health, create a Webhook provider). Put its address in `FLAGSMITH_FEATURE_HEALTH_URL` and Alibi marks the flag unhealthy, with the reason, after a switch-off. It never marks it healthy.
 
+## One command
+
+Alibi's guard is one container. If you already run Flagsmith and an OpenTelemetry Collector, this starts the guard with nothing cloned and nothing built (Docker is all you need):
+
+```bash
+docker run -d --name alibi -p 4319:4319 -e FLAGSMITH_API_URL=https://flagsmith.example.com -e FLAGSMITH_ENVIRONMENT_KEY=<environment key> -e FLAGSMITH_ADMIN_KEY=<master API key> -e ALIBI_FLAG=<flag name> ghcr.io/itssaharsh/alibi-guard
+```
+
+- If the flag is in a running experiment, add `-e FLAGSMITH_EXPERIMENT_ID=<id>`: Alibi then switches the flag off by setting the experiment's rollout to 0%. Without an id it disables the flag, which on Flagsmith 2.295.2 changes nothing for a flag that is in a running experiment.
+- `FLAGSMITH_API_URL` must be reachable from inside the container. Add `-v alibi-data:/data` to keep the guard's state and records across restarts.
+- The guard answers on port 4319: point your collector's `otlphttp` exporter at it with `encoding: json`, and open `http://localhost:4319/api/state` to see what it sees.
+- Optional live board, a second container that shows the guard's state in a browser at http://localhost:4173:
+
+```bash
+docker run -d --name alibi-board -p 4173:4173 --add-host=host.docker.internal:host-gateway -e ALIBI_GUARD_URL=http://host.docker.internal:4319 ghcr.io/itssaharsh/alibi-board
+```
+
+The two-file Compose setup below does the same with a `.env` file.
+
 ## Start Alibi without cloning anything
 
 The images are published, so a folder with two files is enough. You need Docker with Compose:

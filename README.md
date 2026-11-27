@@ -8,6 +8,14 @@ Alibi switches a Flagsmith feature off only when the feature's own code is faili
 
 **In 24 runs whose scenarios and scoring were committed before any of them ran (outages of a shared service, of a service only the feature calls, a flaky database, bugs in the feature), Alibi made the right call 24 times. A rule that compares the two versions at a 20-point margin made it 17 times.** Three of those runs turn on what you call infrastructure: leave them out and it is 21 of 21 against 17 of 21; score them the other way and it is 21 against 20. On the 18 runs before these the two rules tie. [The numbers](#the-numbers-against-two-simpler-rules) say all of it.
 
+**Already running Flagsmith and an OpenTelemetry Collector? One container, nothing cloned or built:**
+
+```bash
+docker run -d --name alibi -p 4319:4319 -e FLAGSMITH_API_URL=https://flagsmith.example.com -e FLAGSMITH_ENVIRONMENT_KEY=<environment key> -e FLAGSMITH_ADMIN_KEY=<master API key> -e ALIBI_FLAG=<flag name> ghcr.io/itssaharsh/alibi-guard
+```
+
+Then point your collector's `otlphttp` exporter (`encoding: json`) at port 4319. For a flag in a running experiment, add `-e FLAGSMITH_EXPERIMENT_ID=<id>`. This line was run on a machine with only Docker on it: the guard counted 16 failures, set the rollout to 0% and confirmed 20 of 20 identities. The live board and a Compose file are in [`deploy/attach/`](deploy/attach/).
+
 ## The problem
 
 You put a new checkout behind a flag for half your shoppers. Twenty minutes later the error graph jumps, and a kill switch that watches the error rate switches the feature off. But the database was down and the feature was fine. Now you have an outage and a rolled-back launch, and nobody knows which caused what.
@@ -82,7 +90,7 @@ The output is shortened in the one place it says so. The page and the command ru
 | "Self-hosted Flagsmith" | `deploy/docker-compose.yml` starts Flagsmith 2.295.2 from the official image and a bootstrap container creates the flag, the three metrics and the experiment. Every run in this README was recorded on it |
 | "Integrations and plugins" | Alibi sits between the OpenTelemetry Collector and Flagsmith: spans in, exposures and metric events out, the rollout change back in |
 | "Developer tools" | The live board, the investigation record, the replay command, and a one-sentence reason for every failing request |
-| "Easy for others to reuse" | The quickstart below is three commands and was run from a fresh copy. `deploy/attach/` starts only Alibi and the board against a Flagsmith you already have. `packages/otel-helpers` is the two functions a Node service needs |
+| "Easy for others to reuse" | One `docker run` of a published image starts Alibi against a Flagsmith you already have, with nothing cloned or built (tested on a machine with only Docker). The quickstart below is three commands and was run from a fresh copy. `deploy/attach/` has the board and a Compose file. `packages/otel-helpers` is the two functions a Node service needs |
 
 ## Quickstart: run it yourself
 
@@ -296,7 +304,7 @@ The attribute names follow OpenTelemetry's feature-flag semantic conventions, wh
 
 ## Use it with your own service
 
-To try it against a Flagsmith you already have, `deploy/attach/` starts only Alibi and its board, configured by a few environment variables; its README lists what must exist in your Flagsmith. Your flag does not have to be in an experiment: with an experiment id, Alibi sets the experiment's rollout to 0% and puts Flagsmith's own numbers in the record; without one, it disables the flag in the environment and the record has no experiment numbers. The collector side is one more exporter:
+To try it against a Flagsmith you already have, start the published image with the one line at the top of this page, or use `deploy/attach/`, which starts Alibi and its board from a Compose file with a few environment variables; its README lists what must exist in your Flagsmith. Your flag does not have to be in an experiment: with an experiment id, Alibi sets the experiment's rollout to 0% and puts Flagsmith's own numbers in the record; without one, it disables the flag in the environment and the record has no experiment numbers. The collector side is one more exporter:
 
 ```yaml
 exporters:
