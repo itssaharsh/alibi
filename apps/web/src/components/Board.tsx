@@ -22,6 +22,24 @@ function Glyph({ tag, n, onPick, selected, over, plain }: { tag: Tag; n: number;
   );
 }
 
+/** Live traffic, one bar a second for the last minute: the board is alive even while nothing fails. */
+function RateStrip({ history }: { history: NonNullable<BoardData['liveHistory']> }) {
+  const peak = Math.max(4, ...history.map((h) => h.requests));
+  const failed = history.reduce((n, h) => n + h.failures, 0);
+  return (
+    <div className="rate" role="img" aria-label={`Requests in each of the last ${history.length} seconds`}>
+      <p className="muted small">
+        Requests a second, last minute. {failed === 0 ? 'Nothing is failing.' : `${failed} failed.`}
+      </p>
+      <div className="rate-bars">
+        {history.map((h, i) => (
+          <i key={i} className={h.failures ? 'bad' : ''} style={{ height: `${Math.max(6, (h.requests / peak) * 100)}%` }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   board: BoardData;
   ctl: Controller;
@@ -115,8 +133,9 @@ export function Board({ board, ctl, selected, onPick, calm, record, skeleton }: 
               <Glyph key={t.id} tag={t} n={i + 1} onPick={onPick} selected={selected.id === t.id} plain />
             ))}
             {rest.length > PILE_CAP ? <span className="more">+{rest.length - PILE_CAP} more</span> : null}
-            {rest.length === 0 && !skeleton ? <span className="muted small">Nothing has failed outside the flagged code.</span> : null}
+            {rest.length === 0 && !skeleton && !board.liveHistory ? <span className="muted small">Nothing has failed outside the flagged code.</span> : null}
           </div>
+          {board.liveHistory && rest.length === 0 && !skeleton ? <RateStrip history={board.liveHistory} /> : null}
         </div>
       </div>
       <div className="mini">
@@ -129,7 +148,7 @@ export function Board({ board, ctl, selected, onPick, calm, record, skeleton }: 
             <p className="mw">{selected.tag.reason}</p>
           </>
         ) : (
-          <p className="muted small">Select a tag to see where that request failed.</p>
+          <p className="muted small">{board.tags.length === 0 ? 'No request has failed yet.' : 'Select a tag to see where that request failed.'}</p>
         )}
       </div>
       <div className="plain">

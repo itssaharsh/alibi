@@ -15,27 +15,41 @@ export interface Selected {
   loading: boolean;
 }
 
-const isLiveRef = (source: string): boolean => source === 'live';
-
 export function App() {
   const params = useMemo(() => readParams(location.search), []);
   const ctl = useBoard(params);
   const { board, index, mode } = ctl;
-  const [selected, setSelected] = useState<Selected>({ loading: false });
-
-  // The first failing request is open on arrival, from the small summary, with no large download.
+  // The open request is derived from the board in front of the person, never stored across sources: a pick made by
+  // hand wins; otherwise the first counted failure, or the newest failure while none counted; a recorded run's
+  // first screen opens on the failure its summary carries. Spans are kept per source and run.
+  const sourceKey = `${ctl.source}|${board?.meta.name ?? ''}`;
+  const [picked, setPicked] = useState<{ key: string; id: string }>();
+  const [spans, setSpans] = useState<Record<string, FlatSpan[]>>({});
+  const tags = board?.tags ?? [];
+  const pickedId = picked && picked.key === sourceKey && tags.some((t) => t.id === picked.id) ? picked.id : undefined;
+  const featuredId = ctl.source === 'live' ? undefined : ctl.featured?.id;
+  const defaultTag =
+    tags.find((t) => t.id === featuredId) ?? tags.find((t) => t.counted) ?? (ctl.source === 'live' ? tags[tags.length - 1] : tags[0]);
+  const openTag = tags.find((t) => t.id === pickedId) ?? defaultTag;
+  const spanKey = openTag ? `${sourceKey}|${openTag.id}` : '';
+  const known = ctl.source !== 'live' && ctl.featured && openTag && ctl.featured.id === openTag.id ? ctl.featured.spans : spans[spanKey];
+  const selected: Selected = {
+    ...(openTag ? { id: openTag.id, tag: openTag } : {}),
+    ...(known ? { spans: known } : {}),
+    loading: Boolean(openTag) && known === undefined,
+  };
+  const openId = openTag?.id;
   useEffect(() => {
-    if (!board || selected.id || !ctl.featured) return;
-    const tag = board.tags.find((t) => t.id === ctl.featured?.id);
-    if (tag) setSelected({ id: tag.id, tag, spans: ctl.featured.spans, loading: false });
-  }, [board, ctl.featured, selected.id]);
-
-  // On a live board the first counted failure is open by default.
-  useEffect(() => {
-    if (!isLiveRef(ctl.source) || !board || selected.id || board.tags.length === 0) return;
-    pick(board.tags.find((t) => t.counted) ?? board.tags[0]!);
+    if (!openId || !spanKey || known !== undefined) return;
+    let current = true;
+    void ctl.trace(openId).then((found) => {
+      if (current) setSpans((all) => ({ ...all, [spanKey]: found }));
+    });
+    return () => {
+      current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctl.source, board?.tags.length, selected.id]);
+  }, [spanKey, known === undefined]);
 
   useEffect(() => {
     if (!params.focus || !board) return;
@@ -44,10 +58,7 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [Boolean(board), params.focus]);
 
-  const pick = (tag: Tag): void => {
-    setSelected({ id: tag.id, tag, loading: true });
-    void ctl.trace(tag.id).then((spans) => setSelected((s) => (s.id === tag.id ? { id: tag.id, tag, spans, loading: false } : s)));
-  };
+  const pick = (tag: Tag): void => setPicked({ key: sourceKey, id: tag.id });
 
   const skeleton = params.state === 'loading';
   const reduced = params.state === 'reduced';

@@ -199,22 +199,10 @@ export function useBoard(params: Params): Controller {
   // First load: the index, the default run's summary, then whatever the address asks for.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    // One source per mode: a live board never loads a recorded run. The replay starts only when there is no live
+    // guard to show, so nothing recorded can reach a live board.
+    const startReplay = async (): Promise<void> => {
       try {
-        if (params.live) {
-          const fallback = (): void => setSource('live-down');
-          live.current = connectLive(
-            params.live,
-            (b) => {
-              if (cancelled) return;
-              liveOn.current = true;
-              setSource('live');
-              show(b);
-              setMode('playing');
-            },
-            fallback,
-          );
-        }
         const idx = await loadIndex();
         if (cancelled) return;
         setIndex(idx);
@@ -245,7 +233,27 @@ export function useBoard(params: Params): Controller {
       } catch {
         if (!cancelled) setMode('failed');
       }
-    })();
+    };
+    if (params.live && params.state !== 'live-down') {
+      live.current = connectLive(
+        params.live,
+        (b) => {
+          if (cancelled) return;
+          liveOn.current = true;
+          setSource('live');
+          show(b);
+          setMode('playing');
+        },
+        () => {
+          if (cancelled || liveOn.current) return;
+          setSource('live-down');
+          void startReplay();
+        },
+      );
+    } else {
+      if (params.state === 'live-down') setSource('live-down');
+      void startReplay();
+    }
     return () => {
       cancelled = true;
       stopClock();

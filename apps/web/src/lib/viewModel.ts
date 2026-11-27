@@ -71,6 +71,8 @@ export interface Board {
   flagsmith?: RecordedResults;
   /** Live only: requests seen in the last second. */
   liveRate?: { requests: number; failures: number };
+  /** Live only: requests and failures in each of the last seconds, oldest first. */
+  liveHistory?: { requests: number; failures: number }[];
 }
 
 export function tagOf(verdict: TraceVerdict, baseMs: number): Tag | undefined {

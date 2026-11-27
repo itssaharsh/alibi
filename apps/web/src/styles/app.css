@@ -130,3 +130,9 @@ footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);font-si
 .fsc-after{display:none}th:first-child{text-align:left}
 @media(max-width:900px){.fsc-hero{display:none}.fsc-after{display:block}}
 @media(max-width:900px){.cap-src{display:none}}
+
+.rate{margin-top:18px}.rate-bars{display:flex;align-items:flex-end;gap:3px;height:92px;margin-top:8px}.rate-bars i{flex:1;max-width:14px;background:var(--success);border-radius:3px 3px 0 0;opacity:.75}.rate-bars i.bad{background:var(--danger);opacity:1}
+.rec .watch{padding:14px 18px}.rec .watch .w-line{font-size:16px}.rec .levels{margin:6px 0 0}.rec .levels>div{padding:8px 12px}.rec .levels p{display:none}.rec .levels .big-n{font-size:22px}.rec .meter{margin:6px 0}
+.rate-bars{justify-content:flex-end;height:78px;border-bottom:1px solid var(--line)}.rate-bars i{flex:0 0 9px;max-width:none}
+.lanes{grid-template-columns:minmax(0,1fr) minmax(0,1.9fr)}.lane{min-width:0}.rate{min-width:0;overflow:hidden}.rate-bars i{flex:1 1 0;min-width:3px;max-width:9px}
+@media(max-width:900px){.lanes{grid-template-columns:1fr}}

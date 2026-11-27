@@ -47,6 +47,7 @@ export function connectLive(url: string, onBoard: (board: Board) => void, onDown
   let timeline: TimelineLine[] = [];
   let record: InvestigationRecord | undefined;
   let liveRate: Board['liveRate'];
+  let liveHistory: NonNullable<Board['liveHistory']> = [];
   // The guard's clock, kept running between messages so the countdown moves smoothly.
   let serverAt = 0;
   let receivedAt = performance.now();
@@ -78,6 +79,7 @@ export function connectLive(url: string, onBoard: (board: Board) => void, onDown
       timeline,
       ...(record ? { record } : {}),
       ...(liveRate ? { liveRate } : {}),
+      ...(liveHistory.length ? { liveHistory } : {}),
       ...(payload.flagsmith?.results ? { flagsmith: { atMs: payload.flagsmith.results.readAtMs, detail: '', data: payload.flagsmith.results } } : {}),
     });
   };
@@ -154,6 +156,7 @@ export function connectLive(url: string, onBoard: (board: Board) => void, onDown
         requests: msg.flagOn.requests + msg.stable.requests + msg.unflagged.requests,
         failures: msg.flagOn.failures + msg.stable.failures + msg.unflagged.failures,
       };
+      liveHistory = [...liveHistory, liveRate].slice(-60);
       return;
     }
     if (msg.type === 'world') {
@@ -208,10 +211,21 @@ export function connectLive(url: string, onBoard: (board: Board) => void, onDown
       window.clearInterval(timer);
     },
     async trace(id) {
-      const response = await fetch(join(url, `/api/traces/${encodeURIComponent(id)}`));
-      if (!response.ok) return [];
-      const json = (await response.json()) as FlatSpan[] | { spans: FlatSpan[] };
-      return (Array.isArray(json) ? json : json.spans).map((s) => ({ ...s, events: [] }));
+      // A failure can reach the board a moment before the guard has its spans, so one empty answer is tried again.
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const response = await fetch(join(url, `/api/traces/${encodeURIComponent(id)}`));
+          if (response.ok) {
+            const json = (await response.json()) as FlatSpan[] | { spans: FlatSpan[] };
+            const spans = (Array.isArray(json) ? json : json.spans).map((s) => ({ ...s, events: [] }));
+            if (spans.length > 0) return spans;
+          }
+        } catch {
+          /* tried again below */
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      return [];
     },
   };
 }

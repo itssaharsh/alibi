@@ -17,7 +17,7 @@ interface Props {
 export function Waterfall({ spans, origins, loading, compact }: Props) {
   const [all, setAll] = useState(false);
   if (loading) return <div className="wf sk" style={{ height: compact ? 96 : 150 }} aria-busy="true" aria-label="Loading the trace" />;
-  if (!spans || spans.length === 0) return <p className="muted small">The spans of this request are not in this run file.</p>;
+  if (!spans || spans.length === 0) return <p className="muted small">The spans of this request are not available.</p>;
   const wf = waterfallOf(spans, origins, FLAGGED_PATH_ATTRIBUTE);
   const hidden = wf.rows.filter((r) => r.quiet).length;
   const rows = all ? wf.rows : wf.rows.filter((r) => !r.quiet);
