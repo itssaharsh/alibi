@@ -1,4 +1,4 @@
-// The only integration code a service needs to work with Alibi.
+// The only integration code a Node service needs to work with Alibi. Copy this file or install the package.
 //
 //   evaluateFlag   asks Flagsmith which variation this user gets, and writes the answer on the
 //                  active span as a `feature_flag.evaluation` event. Alibi reads the variation

@@ -66,3 +66,32 @@ test('the recorded run shows its real sentences and the folded waterfall', async
   await expect(numbers).toContainText('27.16');
   await expect(numbers).toContainText('126');
 });
+
+test('two simpler rules are shown beside Alibi, in the engine\'s words, on every run', async ({ page }) => {
+  await page.goto('./?run=outage');
+  const card = page.getByRole('group', { name: 'Two simpler rules, same requests' }).first();
+  await expect(card).toContainText('Plain error-rate rule: would have switched the flag off here', { useInnerText: true });
+  await expect(card).toContainText('Arm comparison (flag on against stable): would have switched the flag off here, flag on 39.1% against stable 28.8% over the last 60 seconds.', { useInnerText: true });
+  await expect(card).toContainText('Alibi counted 0 of 97, so the flag stays on. 97 failed in a dependency.', { useInnerText: true });
+  await expect(page.getByText('Both simpler rules would have switched it off: at +01:16 and +01:22.')).toBeVisible();
+  await expect(card).not.toContainText('acted sooner');
+
+  await page.goto('./?run=coupon-bug');
+  await expect(page.getByRole('group', { name: 'Two simpler rules, same requests' }).first()).toContainText('Both simpler rules acted sooner than Alibi.');
+
+  await page.goto('./?run=slow-host');
+  await expect(page.locator('.why-line')).toContainText("The flag went off because the feature's own code failed. Afterwards it did not return to the stable level", { useInnerText: true });
+  await expect(page.locator('.why-line')).toContainText('so it was probably not the feature.');
+});
+
+test('a newcomer is helped: no "0 of 0", glosses on the lanes, plain explanations on hover', async ({ page }) => {
+  await page.goto('./?run=outage&state=armed');
+  await expect(page.locator('.verdict')).toContainText('No failures yet');
+  expect(await page.locator('body').innerText()).not.toMatch(/\b0 of 0\b/);
+  await expect(page.locator('.lane p', { hasText: "the new checkout's own code" })).toBeVisible();
+  await expect(page.locator('.lane p', { hasText: 'database, other services, the server' })).toBeVisible();
+  await expect(page.getByText('counts; the flag goes off above 15')).toBeVisible();
+  await page.locator('.lane h3 .gloss', { hasText: 'flagged code' }).hover();
+  await expect(page.getByRole('tooltip').filter({ hasText: "The new checkout's own code, the part that runs only when the flag is on." })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Words used here' })).toContainText('Chance to win');
+});

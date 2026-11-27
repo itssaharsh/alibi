@@ -150,3 +150,30 @@ test('a live board with no failure yet says so', async ({ page }) => {
     server.close();
   }
 });
+
+test('a notice about a dependency only the flagged path calls is shown on the live board', async ({ page }) => {
+  const config = { flag: 'checkout_v2', stableVariation: 'stable', threshold: 15, watchMs: 300000, tolerance: { windowMs: 60000, minRequests: 20, errorRatePoints: 2, p95Factor: 1.25 }, plainRule: { windowMs: 30000, minRequests: 20, errorRate: 0.2 } };
+  const rates = { requests: 10, failures: 0, errorRate: 0, p95Ms: 30 };
+  const run = { name: 'live-run', title: 'Live traffic', planted: 'x', startedAtMs: 1_000_000, source: 'stand-in', recording: true };
+  const notice = { atMs: 1_004_000, span: 'pg.query:SELECT price', failures: 3, text: 'pg.query:SELECT price failed 3 times; only the flagged path calls it. Not counted. A person should look.' };
+  const state = { config, phase: 'armed', counted: 0, notCounted: { dependency: 3, server: 0, mixed: 0 }, totals: { flagOn: { ...rates, failures: 3 }, stable: rates }, switchOffConfirmed: false, lastSpanAtMs: 1_005_000, notices: [notice] };
+  const payload = { state, flagsmith: { switchOff: { requested: false, confirmed: false, detail: '' } }, timeline: [], records: [], run, receiver: {} };
+  const server = createServer((req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (req.url === '/api/state') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ...payload, recent: [] }));
+    } else if (req.url === '/api/events') {
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'Access-Control-Allow-Origin': '*' });
+      res.write(`event: state\ndata: ${JSON.stringify(payload)}\n\n`);
+    } else res.writeHead(404).end();
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const port = (server.address() as { port: number }).port;
+  try {
+    await page.goto(`./?live=http://127.0.0.1:${port}`);
+    await expect(page.getByText(`Notice: ${notice.text}`)).toBeVisible({ timeout: 15_000 });
+  } finally {
+    server.close();
+  }
+});

@@ -14,7 +14,8 @@ export const ENV_KEY = 'ENVKEY-abc123456';
 export const ADMIN_KEY = 'ADMINKEY-secret-xyz789';
 export const CONTROL_TOKEN = 'CONTROL-token-qwe456';
 export const SERVER_KEY = 'ser.SERVERKEY-777888';
-export const SECRETS = [ENV_KEY, ADMIN_KEY, CONTROL_TOKEN, SERVER_KEY];
+export const HEALTH_TOKEN = 'HEALTHTOKEN-abcdef123456';
+export const SECRETS = [ENV_KEY, ADMIN_KEY, CONTROL_TOKEN, SERVER_KEY, HEALTH_TOKEN];
 
 /** A clock the test moves by hand. Timers run in order as time passes, and the service gets a chance to settle after each. */
 export class ManualClock implements Clock {
@@ -97,6 +98,9 @@ export class FakeFlagsmith {
   patches = 0;
   /** Answer this many result reads with nothing yet, as Flagsmith does just after a refresh. */
   resultsMissing = 0;
+  /** Answer Feature Health posts with this status instead of 200. */
+  healthStatus = 200;
+  readonly healthPosts: Record<string, any>[] = [];
   readonly rollouts: Record<string, unknown>[] = [];
   /** Variation shares in the results the fake returns. */
   exposed = { stable: 300, v2: 310 };
@@ -157,6 +161,11 @@ export class FakeFlagsmith {
         } else this.events.push(event);
       });
       return { status: rejected.length === list.length && list.length > 0 ? 400 : 202, body: { accepted: list.length - rejected.length, rejected } };
+    }
+    if (path === `/api/v1/feature-health/${HEALTH_TOKEN}` && method === 'POST') {
+      if (this.healthStatus !== 200) return { status: this.healthStatus, body: { detail: `broken for ${HEALTH_TOKEN}` } };
+      this.healthPosts.push(body as Record<string, any>);
+      return { status: 200 };
     }
     if (path === '/api/v1/identities/' && method === 'GET') {
       if (!sdk) return { status: 403, body: { detail: 'Invalid or missing Environment key' } };

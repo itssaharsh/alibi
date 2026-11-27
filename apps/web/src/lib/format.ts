@@ -27,20 +27,56 @@ export const sig = (x: number): string => String(Number(x.toPrecision(4)));
 
 export const ratesLine = (r: Rates): string => describeLevel(r);
 
-/** The plain rule's side of the story, from the engine's state. */
-export function plainRuleLine(board: Board, finished: boolean): string {
-  const { state } = board;
-  const flag = state.config.flag;
-  if (state.plainRuleTrippedAtMs !== undefined) {
-    return `A plain error-rate rule would have switched ${flag} off at ${rel(board, state.plainRuleTrippedAtMs)}.`;
-  }
-  return finished ? `A plain error-rate rule would not have switched ${flag} off.` : 'A plain error-rate rule is watching the same requests.';
+export interface SimplerRuleLine {
+  key: 'plain' | 'arm';
+  tripped: boolean;
+  /** Relative time of the trip, for example `+01:16`. */
+  at?: string;
+  /** The engine's own sentence. */
+  text: string;
 }
 
-export function alibiLine(board: Board): string {
+const PREFIX = { plain: 'Plain error-rate rule:', arm: 'Arm comparison (flag on against stable):' } as const;
+
+/** The two simpler rules on the same requests, in the engine's own wording, and what Alibi did. */
+export function simplerRules(board: Board, finished: boolean): { rules: SimplerRuleLine[]; alibi: string; sooner?: string } {
   const { state } = board;
-  const failures = state.totals.flagOn.failures;
-  if (failures === 0) return 'No request with the flag on has failed yet.';
+  const line = (key: 'plain' | 'arm', abs: number | undefined): SimplerRuleLine => {
+    if (abs !== undefined) {
+      const entry = board.timeline.find((e) => e.text.startsWith(PREFIX[key]));
+      return { key, tripped: true, at: rel(board, abs), text: entry?.text ?? `${PREFIX[key]} would have switched the flag off here.` };
+    }
+    return { key, tripped: false, text: finished ? `${PREFIX[key]} would not have switched the flag off.` : `${PREFIX[key]} watching the same requests.` };
+  };
+  const rules = [line('plain', state.plainRuleTrippedAtMs), line('arm', state.armRuleTrippedAtMs)];
+  let sooner: string | undefined;
+  const off = state.switchedOffAtMs;
+  if (off !== undefined) {
+    const early = [
+      state.plainRuleTrippedAtMs !== undefined && state.plainRuleTrippedAtMs < off ? 'plain' : '',
+      state.armRuleTrippedAtMs !== undefined && state.armRuleTrippedAtMs < off ? 'arm' : '',
+    ].filter(Boolean);
+    if (early.length === 2) sooner = 'Both simpler rules acted sooner than Alibi.';
+    else if (early[0] === 'plain') sooner = 'The plain error-rate rule acted sooner than Alibi.';
+    else if (early[0] === 'arm') sooner = 'The arm comparison acted sooner than Alibi.';
+  }
+  return { rules, alibi: alibiLine(board, finished), ...(sooner ? { sooner } : {}) };
+}
+
+/** The short line on the stamp card before anything is switched off. */
+export function simplerRulesShort(board: Board, finished: boolean): string {
+  const p = board.state.plainRuleTrippedAtMs;
+  const a = board.state.armRuleTrippedAtMs;
+  if (p !== undefined && a !== undefined) return `Both simpler rules would have switched it off: at ${rel(board, p)} and ${rel(board, a)}.`;
+  if (p !== undefined) return `The plain error-rate rule would have switched it off at ${rel(board, p)}.`;
+  if (a !== undefined) return `The arm comparison would have switched it off at ${rel(board, a)}.`;
+  return finished ? 'Neither simpler rule would have switched it off.' : 'Two simpler rules are watching the same requests.';
+}
+
+export function alibiLine(board: Board, finished: boolean): string {
+  const { state } = board;
+  const failures = Math.max(state.totals.flagOn.failures, board.tags.length);
+  if (failures === 0) return 'Alibi: no request with the flag on has failed yet.';
   if (state.switchedOffAtMs !== undefined) return `Alibi switched it off at ${rel(board, state.switchedOffAtMs)}, after ${state.counted} counted failures.`;
   if (state.phase === 'switching-off') return `Alibi counted ${state.counted} failures on the flagged path and is switching it off.`;
   const parts: string[] = [];
@@ -48,6 +84,6 @@ export function alibiLine(board: Board): string {
   if (n.dependency) parts.push(`${n.dependency} in a dependency`);
   if (n.server) parts.push(`${n.server} in the server`);
   if (n.mixed) parts.push(`${n.mixed} in both`);
-  const rest = parts.length ? ` The rest failed ${parts.join(', ')}.` : '';
-  return `Alibi counted ${state.counted} of ${failures}, so the flag is on.${rest}`;
+  const rest = parts.length ? ` ${parts.join(', ').replace(/^(\d+)/, '$1 failed')}.` : '';
+  return `Alibi counted ${state.counted} of ${failures}, so the flag ${finished ? 'stays' : 'is'} on.${rest}`;
 }

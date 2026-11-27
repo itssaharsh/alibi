@@ -159,7 +159,7 @@ Take Flagsmith out and nothing is left. It decides who gets the feature, it is t
 | Flagsmith feature | What it does here | Where |
 |---|---|---|
 | Self-hosted Flagsmith in Docker | The whole example runs against your own Flagsmith, created and configured by a bootstrap container | `deploy/docker-compose.yml`, `deploy/bootstrap/bootstrap.sh` |
-| Multivariate flag with keyed variations | `checkout_v2` gives each shopper `stable` or `v2`. The shop reads it with a plain flag call | `apps/shop/src/flagged.js` |
+| Multivariate flag with keyed variations | `checkout_v2` gives each shopper `stable` or `v2`. The shop reads it with a plain flag call | `packages/otel-helpers/src/index.js` |
 | Experimentation: exposures and metrics | Alibi turns spans into exposure events and three metric events (`checkout_completed`, `flag_path_failure`, `checkout_latency_ms`). The shop has no tracking call of its own | `packages/guard/src/service.ts` (the events), `packages/guard/src/forwarder.ts` (the batches) |
 | Experiment rollout, through the Admin API | The switch. Alibi sets the experiment's rollout to 0%, then evaluates 20 identities and requires every one to get `stable` before it reports the switch-off | `packages/guard/src/flagsmith.ts` |
 | Experiment results | Flagsmith's own numbers per variation go into the investigation record | the record on the live page |
@@ -206,7 +206,7 @@ service:
       exporters: [otlp/jaeger, otlphttp/alibi]
 ```
 
-Put the flag's answer on the span, and run the feature inside a marked span. This is the whole integration (`apps/shop/src/flagged.js` has both helpers for Node):
+Put the flag's answer on the span, and run the feature inside a marked span. This is the whole integration (`packages/otel-helpers` has both helpers for Node):
 
 ```js
 const variation = await evaluateFlag({ flagsmith, flag: 'checkout_v2', userId, fallback: 'stable' });

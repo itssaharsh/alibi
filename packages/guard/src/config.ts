@@ -27,6 +27,11 @@ export interface FlagsmithSettings {
   /** Metric id by metric name, as written by the bootstrap. */
   metrics: Record<string, number>;
   switchOff: SwitchOffStrategy;
+  /**
+   * Path of the Feature Health webhook (a secret: it holds the token), when Flagsmith has it. Alibi then marks the
+   * flag unhealthy, with the reason, after a switch-off. The path is added to `apiRoot`.
+   */
+  featureHealthPath?: string;
   /** How many identities to evaluate when confirming a switch-off. */
   checkIdentities: number;
 }
@@ -198,6 +203,17 @@ export function loadConfig(env: Env, read: (path: string) => string = (path) => 
     run: { name, title: env.ALIBI_RUN_TITLE ?? name, planted: env.ALIBI_RUN_PLANTED ?? 'Not stated.' },
     secrets,
   };
+  const healthUrl = pick('FLAGSMITH_FEATURE_HEALTH_URL', 'featureHealthUrl');
+  if (healthUrl !== undefined) {
+    let path: string;
+    try {
+      path = new URL(healthUrl).pathname;
+    } catch {
+      throw new ConfigError('FLAGSMITH_FEATURE_HEALTH_URL is not a web address');
+    }
+    config.flagsmith.featureHealthPath = path;
+    config.secrets.push(healthUrl, path, path.split('/').filter(Boolean).pop() ?? path);
+  }
   if (controlToken) config.controlToken = controlToken;
   if (env.ALIBI_RECORD) config.recordPath = env.ALIBI_RECORD;
   if (env.ALIBI_RECORD_DIR) config.recordDir = env.ALIBI_RECORD_DIR;

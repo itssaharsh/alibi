@@ -1,0 +1,14 @@
+{
+  "name": "@alibi/otel-helpers",
+  "version": "0.1.0",
+  "description": "Two small helpers that make a Flagsmith flag visible to Alibi through OpenTelemetry spans: evaluate a flag and stamp the span; wrap flagged code in a marked span.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": "./src/index.js",
+  "files": ["src"],
+  "engines": { "node": ">=20" },
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.9.0"
+  },
+  "license": "MIT"
+}

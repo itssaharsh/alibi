@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createReplayer, replayRun } from '@alibi/core';
 import { buildRun } from '../../../../packages/core/tests/fixtures';
 import { metaOf, snapshotOf } from './snapshots';
-import { alibiLine, plainRuleLine } from './format';
+import { alibiLine, simplerRules, simplerRulesShort } from './format';
 import { applySnapshot, boardFrom, outcomeOf, waterfallOf } from './viewModel';
 import { FLAGGED_PATH_ATTRIBUTE } from '@alibi/core';
 
@@ -22,8 +22,11 @@ describe('the view model reads the engine and adds nothing', () => {
     expect(board.tags.every((t) => !t.counted && t.cls === 'dependency')).toBe(true);
     expect(outcomeOf(board)).toMatchObject({ kind: 'on', counted: 0 });
     expect(board.moments.map((m) => m.key)).toEqual(['plain-rule']);
-    expect(plainRuleLine(board, true)).toMatch(/^A plain error-rate rule would have switched checkout_v2 off at \+\d\d:\d\d\.$/);
-    expect(alibiLine(board)).toContain(`Alibi counted 0 of ${snap.state.totals.flagOn.failures}, so the flag is on.`);
+    const two = simplerRules(board, true);
+    expect(two.rules[0]!.text).toMatch(/^Plain error-rate rule: would have switched the flag off here, /);
+    expect(two.rules[1]!.text).toMatch(/^Arm comparison \(flag on against stable\): would (not )?have switched the flag off/);
+    expect(simplerRulesShort(board, true)).toMatch(/^(Both simpler rules|The plain error-rate rule) would have switched it off/);
+    expect(alibiLine(board, true)).toContain(`Alibi counted 0 of ${snap.state.totals.flagOn.failures}, so the flag stays on.`);
     expect(snap.record).toBeUndefined();
   });
 
@@ -31,7 +34,7 @@ describe('the view model reads the engine and adds nothing', () => {
     const { r, snap } = finished('feature-bug');
     const board = boardFrom(metaOf(r.header), snap);
     expect(board.tags.filter((t) => t.counted).length).toBeGreaterThanOrEqual(16);
-    expect(board.moments.map((m) => m.key).filter((k) => k !== 'plain-rule')).toEqual(['threshold', 'switched-off', 'recovered', 'label']);
+    expect(board.moments.map((m) => m.key).filter((k) => k !== 'plain-rule' && k !== 'arm-rule')).toEqual(['threshold', 'switched-off', 'recovered', 'label']);
     const o = outcomeOf(board);
     expect(o).toMatchObject({ kind: 'labelled', label: 'probably the feature' });
     expect(snap.record?.nextStep).toBe('A person investigates. Alibi does not declare the cause.');
@@ -125,5 +128,22 @@ describe('Flagsmith results are taken as recorded', () => {
     const got = recordedResults([header, { kind: 'flagsmith', atMs: 9, what: 'results', ok: false, detail: 'no' }, { kind: 'flagsmith', atMs: 7, what: 'results', ok: true, detail: 'as of the switch-off', data }]);
     expect(got).toEqual({ atMs: 7, detail: 'as of the switch-off', data });
     expect(recordedResults([header])).toBeUndefined();
+  });
+});
+
+const realOutage = fileURLToPath(new URL('../../../../runs/outage.jsonl', import.meta.url));
+describe.skipIf(!existsSync(realOutage))('against the recorded outage run', () => {
+  const lines = parseRun(readFileSync(realOutage, 'utf8'));
+  const r = createReplayer(lines);
+  const events = r.step(Infinity);
+  const board = boardFrom(metaOf(r.header), snapshotOf(r, events, true, r.endsAtMs - r.header.startedAtMs));
+
+  it('shows both simpler rules in the engine\'s words and says Alibi never acted', () => {
+    const two = simplerRules(board, true);
+    expect(two.rules.map((x) => x.at)).toEqual(['+01:16', '+01:22']);
+    expect(two.rules[1]!.text).toBe('Arm comparison (flag on against stable): would have switched the flag off here, flag on 39.1% against stable 28.8% over the last 60 seconds.');
+    expect(simplerRulesShort(board, true)).toBe('Both simpler rules would have switched it off: at +01:16 and +01:22.');
+    expect(two.alibi).toMatch(/^Alibi counted 0 of 97, so the flag stays on\./);
+    expect(two.sooner).toBeUndefined();
   });
 });

@@ -1,0 +1,6 @@
+**
+!apps/shop/package.json
+!apps/shop/package-lock.json
+!apps/shop/.npmrc
+!apps/shop/src
+!packages/otel-helpers

@@ -25,9 +25,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+          cache: npm
       # The page uses the engine from source, so only the page's own dependencies are installed.
       - name: Install
-        run: npm install --workspace apps/web --no-audit --no-fund
+        run: npm ci --workspace apps/web --no-audit --no-fund
       - name: Build
         run: npm run build --workspace apps/web
         env:

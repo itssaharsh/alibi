@@ -4,11 +4,14 @@
   "version": "0.1.0",
   "description": "A small shop service for the Alibi example: a checkout behind a Flagsmith flag, traced with OpenTelemetry.",
   "type": "module",
-  "engines": { "node": ">=22.15" },
+  "engines": {
+    "node": ">=22.15"
+  },
   "scripts": {
     "start": "node --import ./src/telemetry.js ./src/server.js"
   },
   "dependencies": {
+    "@alibi/otel-helpers": "file:../../packages/otel-helpers",
     "@opentelemetry/api": "1.10.0",
     "@opentelemetry/exporter-trace-otlp-http": "0.301.2",
     "@opentelemetry/instrumentation": "0.301.2",

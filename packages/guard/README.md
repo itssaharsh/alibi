@@ -27,6 +27,7 @@ Flagsmith settings come from these variables or from the bootstrap file (`ALIBI_
 | `FLAGSMITH_ADMIN_KEY` | file `masterKey` | Master API key for the Admin API (`Authorization: Api-Key`). |
 | `FLAGSMITH_ADMIN_TOKEN` | none | A user token (`Authorization: Token`), used when there is no admin key. One of the two is required. |
 | `FLAGSMITH_EXPERIMENT_ID` | file `experimentId` | The experiment to switch off and to read results from. Required. When unset it is read from the bootstrap file again at each call, because a reset can create a new experiment. |
+| `FLAGSMITH_FEATURE_HEALTH_URL` | file `featureHealthUrl` | The Feature Health webhook address (a secret). When set, the flag is marked unhealthy in Flagsmith after a switch-off, with the count, the most common reason and the switch-off, and again with the label after the watch. Never marked healthy. Only its path is used, on top of `FLAGSMITH_API_URL`. |
 | `ALIBI_SWITCH_OFF` | `rollout-zero` | How the flag is switched off: the experiment's rollout is set to 0%, so every identity gets the stable value and the experiment keeps running. |
 | `ALIBI_CHECK_IDENTITIES` | `20` | How many identities are evaluated to confirm a switch-off. |
 | `ALIBI_RULES` | none | JSON rule file: `flag`, `stableVariation`, `threshold`, `watchMs`, `tolerance`, `plainRule`, `events` (`exposure`, `completed`, `failure`, `latency`). |

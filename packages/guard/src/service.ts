@@ -66,7 +66,7 @@ export interface SwitchOffView {
 
 export interface StatePayload {
   state: GuardState;
-  flagsmith: { forwarded: ForwardCounters; /** Set once the rollout is 0%: no more exposures or metrics are sent. */ forwardingStoppedAtMs?: number; switchOff: SwitchOffView; results?: FlagsmithExperimentSummary };
+  flagsmith: { forwarded: ForwardCounters; /** Set once the rollout is 0%: no more exposures or metrics are sent. */ forwardingStoppedAtMs?: number; /** Feature Health: the flag is marked unhealthy after a switch-off. Absent when Flagsmith has no such webhook. */ featureHealth?: { posts: number; lastPostedAtMs?: number; lastProblem?: string }; switchOff: SwitchOffView; results?: FlagsmithExperimentSummary };
   /** The last 200 verdicts that failed or had the flag on. */
   recent?: TraceVerdict[];
   timeline: TimelineEntry[];
@@ -160,6 +160,7 @@ export class AlibiService {
   private reading = false;
   private lastRefreshAtMs: number | undefined;
   private forwardingStoppedAtMs: number | undefined;
+  private health = { posts: 0 } as { posts: number; lastPostedAtMs?: number; lastProblem?: string };
   private endReadPending = false;
   private lastRecord: InvestigationRecord | undefined;
   private receiver: ReceiverCounters = { batches: 0, spans: 0, malformed: 0 };
@@ -386,6 +387,38 @@ export class AlibiService {
     this.lastRecord = record;
     this.records.save(record);
     this.log.info(`record ${record.id} written: ${record.label}`);
+    this.markUnhealthy(this.switchOff.detail, record.label);
+  }
+
+  /**
+   * Tells Flagsmith's Feature Health that the flag is unhealthy, in the engine's own words: the count, the most
+   * common reason, the switch-off, and after the watch the label. It stays "unhealthy" either way, because a person
+   * has not looked yet; Alibi never posts "healthy". A failure is shown in the state and never stops anything.
+   */
+  private markUnhealthy(switchOffDetail: string, label: string | undefined): void {
+    if (this.config.flagsmith.featureHealthPath === undefined) return;
+    const state = this.guard.state;
+    const reasons = new Map<string, number>();
+    for (const v of this.verdicts) if (v.counted) reasons.set(v.reason, (reasons.get(v.reason) ?? 0) + 1);
+    const common = [...reasons.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const textBlocks = [
+      { title: 'Alibi switched this flag off', text: switchOffDetail },
+      { title: 'Failures counted', text: `${state.counted} requests with the flag on failed inside the flagged path. The switch-off needs more than ${state.config.threshold}.` },
+      ...(common ? [{ title: 'Most common reason', text: common }] : []),
+      ...(label ? [{ title: 'After the five-minute watch', text: `${label} (not proven). A person investigates.` }] : []),
+    ];
+    const generation = this.generation;
+    void this.api
+      .postFeatureHealth({ textBlocks })
+      .then(() => {
+        if (generation !== this.generation) return;
+        this.health = { posts: this.health.posts + 1, lastPostedAtMs: this.clock.now() };
+      })
+      .catch((error: unknown) => {
+        if (generation !== this.generation) return;
+        this.health = { ...this.health, lastProblem: reasonOf(error) };
+        this.log.warn(`Feature Health was not updated: ${reasonOf(error)}`);
+      });
   }
 
   private broadcast(event: StreamEvent): void {
@@ -468,6 +501,7 @@ export class AlibiService {
           // moment are still sent; requests keep feeding the rule, the watch and the recording.
           this.forwardingStoppedAtMs = now;
           this.emit(this.guard.confirmSwitchOff(now, true, detail));
+          this.markUnhealthy(detail, undefined);
           this.endReadPending = true;
           this.scheduleEndRead();
           return;
@@ -598,6 +632,7 @@ export class AlibiService {
       flagsmith: {
         forwarded: this.forwarder.totals,
         ...(this.forwardingStoppedAtMs === undefined ? {} : { forwardingStoppedAtMs: this.forwardingStoppedAtMs }),
+        ...(this.config.flagsmith.featureHealthPath === undefined ? {} : { featureHealth: this.health }),
         switchOff: { requested: this.switchOff.requested, confirmed: state.switchOffConfirmed, detail: this.switchOff.detail },
         ...(this.results ? { results: this.results } : {}),
       },
@@ -664,6 +699,7 @@ export class AlibiService {
     this.endReadPending = false;
     this.reading = false;
     this.forwardingStoppedAtMs = undefined;
+    this.health = { posts: 0 };
     this.lastRecord = undefined;
     this.ticks = 0;
     this.lastDrainMs = 0;

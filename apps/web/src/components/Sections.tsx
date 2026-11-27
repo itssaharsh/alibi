@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { formatRelative, stableLevelLabel, type FlatSpan } from '@alibi/core';
 import type { Rates } from '@alibi/core';
 import type { Board as BoardData, Tag } from '../lib/viewModel';
 import { outcomeOf, percent } from '../lib/viewModel';
 import type { Controller } from '../lib/useBoard';
 import { AUTHORS_RULE, COLLECTOR_CONFIG, REPO_URL, SPAN_ATTRIBUTES } from '../lib/copy';
-import { classWords, ms, pct, ratesLine, rel, relMs, sig } from '../lib/format';
+import { classWords, ms, pct, ratesLine, rel, relMs, sig, simplerRules, simplerRulesShort } from '../lib/format';
+import { Gloss } from './Gloss';
 import { Waterfall } from './Waterfall';
 import type { Selected } from '../App';
 
@@ -13,6 +14,7 @@ export function VerdictCard({ board, ctl, skeleton }: { board: BoardData; ctl: C
   const o = outcomeOf(board);
   const finished = board.nowMs >= board.endMs - 1 && ctl.mode !== 'playing';
   const flag = board.state.config.flag;
+  const failures = Math.max(o.kind === 'waiting' ? 0 : o.failures, board.tags.length);
   let stamp = '';
   let tone = 'ok';
   if (o.kind === 'on') stamp = finished ? 'Flag stays on' : 'Flag is on';
@@ -28,6 +30,8 @@ export function VerdictCard({ board, ctl, skeleton }: { board: BoardData; ctl: C
     stamp = o.label;
     tone = o.label === 'probably the feature' ? 'warn' : 'neutral';
   }
+  const after = board.record?.afterSwitchOff;
+  const before = board.state.stableBaseline;
   return (
     <div className="verdict" aria-busy={skeleton}>
       {stamp ? (
@@ -36,30 +40,38 @@ export function VerdictCard({ board, ctl, skeleton }: { board: BoardData; ctl: C
           {o.kind === 'labelled' ? <small>Not proven. A person investigates.</small> : null}
         </div>
       ) : null}
-      {o.kind === 'waiting' || skeleton ? (
+      {failures === 0 || skeleton ? (
         <div className="v-line">
-          <b>Waiting for the first failing request.</b>
+          <b>No failures yet</b>
+          <span>{simplerRulesShort(board, finished)}</span>
         </div>
       ) : (
         <>
-          <div className="big" aria-label={`${o.counted} of ${o.failures}`}>
-            {o.counted}
-            <small> of {o.failures}</small>
+          <div className="big" aria-label={`${o.kind === 'waiting' ? 0 : o.counted} of ${failures}`}>
+            {o.kind === 'waiting' ? 0 : o.counted}
+            <small> of {failures}</small>
           </div>
           <div className="v-line">
-            <b>failures counted against {flag}</b>
-            <span>{o.kind === 'switching' ? `The counter passed ${board.state.config.threshold}. Switching it off in Flagsmith.` : o.kind === 'labelled' || o.kind === 'off' ? `Switched off in Flagsmith at ${board.state.switchedOffAtMs !== undefined ? rel(board, board.state.switchedOffAtMs) : ''}.` : plainSentence(board, finished)}</span>
+            <b>
+              failures counted against <Gloss term="checkout_v2">{flag}</Gloss>
+            </b>
+            <span>
+              {o.kind === 'switching'
+                ? `The counter passed ${board.state.config.threshold}. Switching it off in Flagsmith.`
+                : o.kind === 'labelled' || o.kind === 'off'
+                  ? `Switched off in Flagsmith at ${board.state.switchedOffAtMs !== undefined ? rel(board, board.state.switchedOffAtMs) : ''}.`
+                  : simplerRulesShort(board, finished)}
+            </span>
           </div>
         </>
       )}
+      {o.kind === 'labelled' && o.label === 'probably not the feature' && after && before ? (
+        <p className="why-line">
+          The flag went off because the feature's own code failed. Afterwards it did not return to the stable level (errors {percent(after.errorRate)} against {percent(before.errorRate)}, <Gloss term="p95">p95</Gloss> {ms(after.p95Ms)} against {ms(before.p95Ms)}), so it was probably not the feature.
+        </p>
+      ) : null}
     </div>
   );
-}
-
-function plainSentence(board: BoardData, finished: boolean): string {
-  const t = board.state.plainRuleTrippedAtMs;
-  if (t !== undefined) return `A plain error-rate rule would have switched it off at ${rel(board, t)}.`;
-  return finished ? 'A plain error-rate rule would not have switched it off.' : 'A plain error-rate rule is watching the same requests.';
 }
 
 function Level({ title, rates }: { title: string; rates: Rates }) {
@@ -69,10 +81,42 @@ function Level({ title, rates }: { title: string; rates: Rates }) {
       <dl>
         <dt>errors</dt>
         <dd className="big-n">{percent(rates.errorRate)}</dd>
-        <dt>p95 speed</dt>
+        <dt>
+          <Gloss term="p95">p95</Gloss> speed
+        </dt>
         <dd className="big-n">{ms(rates.p95Ms)}</dd>
       </dl>
       <p className="muted small">{ratesLine(rates)}.</p>
+    </div>
+  );
+}
+
+/** Both simpler rules on the same requests, in the engine's words, then what Alibi did. Factual: no rule is made to look worse. */
+export function SimplerRules({ board, finished }: { board: BoardData; finished: boolean }) {
+  const { rules, alibi, sooner } = simplerRules(board, finished);
+  return (
+    <div className="simpler" role="group" aria-label="Two simpler rules, same requests">
+      <h3>Two simpler rules, same requests</h3>
+      {rules.map((r) => (
+        <p key={r.key} className={r.tripped ? 'tripped' : ''}>
+          {r.at ? <b>{r.at}</b> : null}
+          <span>
+            {r.key === 'plain' ? <Gloss term="plain error-rate rule">Plain error-rate rule</Gloss> : <Gloss term="arm comparison">Arm comparison</Gloss>}
+            {r.text.slice(r.key === 'plain' ? 'Plain error-rate rule'.length : 'Arm comparison'.length)}
+          </span>
+        </p>
+      ))}
+      <p className="alibi-line">
+        <span>
+          {alibi}
+          {sooner ? ` ${sooner}` : ''}
+        </span>
+      </p>
+      {board.state.notices?.map((n) => (
+        <p key={n.span} className="notice">
+          <span>Notice: {n.text}</span>
+        </p>
+      ))}
     </div>
   );
 }
@@ -191,7 +235,9 @@ export function FlagsmithNumbers({ board, small }: { board: BoardData; small?: b
                   {f.variations.map((v) => (
                     <th key={v.variation}>
                       {v.variation}
-                      <small>{v.exposures} exposures</small>
+                      <small>
+                        {v.exposures} <Gloss term="exposures">exposures</Gloss>
+                      </small>
                     </th>
                   ))}
                 </tr>
@@ -202,18 +248,22 @@ export function FlagsmithNumbers({ board, small }: { board: BoardData; small?: b
                     <td className="left">{name.replace(/_/g, ' ')}</td>
                     {f.variations.map((v) => {
                       const m = v.metrics.find((x) => x.name === name);
-                      const extra = m
-                        ? [
-                            m.lift !== undefined ? `lift ${pct(m.lift)}` : '',
-                            m.chanceToWin !== undefined ? `chance to win ${pct(m.chanceToWin)}` : '',
-                            m.interval ? `interval ${sig(m.interval[0])} to ${sig(m.interval[1])}` : '',
-                          ].filter(Boolean)
-                        : [];
+                      const extra: ReactNode[] = [];
+                      if (m) {
+                        if (m.lift !== undefined) extra.push(`lift ${pct(m.lift)}`);
+                        if (m.chanceToWin !== undefined)
+                          extra.push(
+                            <>
+                              <Gloss term="chance to win">chance to win</Gloss> {pct(m.chanceToWin)}
+                            </>,
+                          );
+                        if (m.interval) extra.push(`interval ${sig(m.interval[0])} to ${sig(m.interval[1])}`);
+                      }
                       return (
                         <td key={v.variation} className="fs-cell">
                           {m ? <b>{sig(m.value)}</b> : null}
-                          {extra.map((e) => (
-                            <small key={e}>{e}</small>
+                          {extra.map((e, i) => (
+                            <small key={i}>{e}</small>
                           ))}
                         </td>
                       );
@@ -247,6 +297,20 @@ export function Record({ board }: { board: BoardData }) {
       <p className="rec-label">
         <b>{r.label}</b>, not proven. {r.nextStep}
       </p>
+      <SimplerRules board={board} finished />
+      {r.notices?.length ? (
+        <>
+          <h3>Notices</h3>
+          <ul className="tl">
+            {r.notices.map((n) => (
+              <li key={n.span}>
+                <b>{formatRelative(n.atMs - board.meta.startedAtMs)}</b>
+                {n.text}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
       <div className="cols">
         <div>
           <h3>Timeline</h3>
@@ -271,7 +335,9 @@ export function Record({ board }: { board: BoardData }) {
               <th>Route and span</th>
               <th>{r.flag} requests</th>
               <th>failed</th>
-              <th>p95</th>
+              <th>
+                <Gloss term="p95">p95</Gloss>
+              </th>
               <th>stable requests</th>
               <th>failed</th>
               <th>p95</th>

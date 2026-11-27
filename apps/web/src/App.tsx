@@ -6,6 +6,7 @@ import type { Tag } from './lib/viewModel';
 import { lowerFirst } from './lib/format';
 import { REPO_URL } from './lib/copy';
 import { Board } from './components/Board';
+import { WordsUsed } from './components/Gloss';
 import { AuthorRule, Footer, FailingAndTrace, FlagsmithNumbers, PlugIn, Record, VerdictCard, WatchBand } from './components/Sections';
 
 export interface Selected {
@@ -104,6 +105,7 @@ export function App() {
                 Was it the <em>flag</em>, or was the database down?
               </h1>
               <p className="sub">Alibi switches a feature flag off only when the feature's own code is failing, and shows you why.</p>
+              <p className="for-line">For teams who ship features behind Flagsmith flags.</p>
               {board ? <VerdictCard board={board} ctl={ctl} skeleton={skeleton} /> : <div className="verdict sk" style={{ height: 120 }} aria-busy="true" />}
               {isLive ? null : (
               <button type="button" className="btn" aria-disabled={mode === 'loading'} onClick={() => (playing ? ctl.pause() : ctl.play())}>
@@ -147,6 +149,7 @@ export function App() {
           ) : null}
           <div id="focus-rule"><AuthorRule {...(board ? { board } : {})} /></div>
           <div id="focus-plug"><PlugIn /></div>
+          <WordsUsed />
         </main>
         <Footer sources={index ? index.runs.map((r) => r.source).filter((v, i, a) => a.indexOf(v) === i) : []} />
       </div>

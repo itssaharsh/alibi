@@ -264,6 +264,6 @@ export type RunLine =
   | RunHeader
   | { kind: 'spans'; atMs: number; spans: FlatSpan[] }
   /** Something Flagsmith returned during the recorded run, replayed as it was. */
-  | { kind: 'flagsmith'; atMs: number; what: 'switch-off' | 'evaluation-check' | 'results' | 'events'; ok: boolean; detail: string; data?: unknown }
+  | { kind: 'flagsmith'; atMs: number; what: 'switch-off' | 'evaluation-check' | 'results' | 'events' | 'feature-health'; ok: boolean; detail: string; data?: unknown }
   /** Something the run script did to the world, for example stopping the database. */
   | { kind: 'world'; atMs: number; text: string };

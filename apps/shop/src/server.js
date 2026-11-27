@@ -2,7 +2,7 @@ import { context, trace, SpanStatusCode } from '@opentelemetry/api';
 import express from 'express';
 import pg from 'pg';
 import { DefaultFlag, Flagsmith } from 'flagsmith-nodejs';
-import { evaluateFlag, inSpan, runFlagged } from './flagged.js';
+import { evaluateFlag, inSpan, runFlagged } from '@alibi/otel-helpers';
 import { stableCoupon, stablePrice, v2Coupon, v2Price } from './pricing.js';
 
 const FLAG = 'checkout_v2';

@@ -195,7 +195,9 @@ services:
         condition: service_completed_successfully
 
   shop:
-    build: ../apps/shop
+    build:
+      context: ..
+      dockerfile: apps/shop/Dockerfile
     restart: unless-stopped
     entrypoint:
       - /bin/sh

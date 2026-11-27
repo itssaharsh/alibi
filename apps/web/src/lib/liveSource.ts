@@ -100,6 +100,7 @@ export function connectLive(url: string, onBoard: (board: Board) => void, onDown
   const momentsFromState = (s: GuardState, answer: string | undefined): Moment[] => {
     const out: Moment[] = [];
     if (s.plainRuleTrippedAtMs !== undefined) out.push({ key: 'plain-rule', atMs: rel(s.plainRuleTrippedAtMs), text: 'The plain rule trips' });
+    if (s.armRuleTrippedAtMs !== undefined) out.push({ key: 'arm-rule', atMs: rel(s.armRuleTrippedAtMs), text: 'The arm comparison trips' });
     if (s.switchedOffAtMs !== undefined) out.push({ key: 'switched-off', atMs: rel(s.switchedOffAtMs), confirmed: s.switchOffConfirmed, ...(answer ? { detail: answer } : {}), text: 'Switched off in Flagsmith' });
     if (s.recoveredAtMs !== undefined) out.push({ key: 'recovered', atMs: rel(s.recoveredAtMs), text: 'Back at the stable level' });
     return out;

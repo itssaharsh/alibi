@@ -5,7 +5,8 @@ import { ms, relMs } from '../lib/format';
 import { Waterfall } from './Waterfall';
 import { Controls } from './Controls';
 import type { Selected } from '../App';
-import { plainRuleLine, alibiLine } from '../lib/format';
+import { SimplerRules } from './Sections';
+import { Gloss } from './Gloss';
 
 const PILE_CAP = 300;
 
@@ -29,7 +30,7 @@ function RateStrip({ history }: { history: NonNullable<BoardData['liveHistory']>
   return (
     <div className="rate" role="img" aria-label={`Requests in each of the last ${history.length} seconds`}>
       <p className="muted small">
-        Requests a second, last minute. {failed === 0 ? 'Nothing is failing.' : `${failed} failed.`}
+        Requests a second, last minute.{failed === 0 ? '' : ` ${failed} failed.`}
       </p>
       <div className="rate-bars">
         {history.map((h, i) => (
@@ -89,7 +90,10 @@ export function Board({ board, ctl, selected, onPick, calm, record, skeleton }: 
         <div className="flag">
           <span className={`tog${off ? ' off' : state.phase === 'switching-off' ? ' mid' : ''}`} aria-hidden="true" />
           <span>
-            <b>{state.config.flag}</b> {flagLabel}
+            <b>
+              <Gloss term="checkout_v2">{state.config.flag}</Gloss>
+            </b>{' '}
+            {flagLabel}
           </span>
         </div>
         <span className="muted small" role="status">
@@ -103,12 +107,15 @@ export function Board({ board, ctl, selected, onPick, calm, record, skeleton }: 
       </div>
       <div className="lanes">
         <div className="lane">
-          <h3>On the flagged code</h3>
-          <p className="muted small">Counts toward the switch-off</p>
+          <h3>
+            On the <Gloss term="flagged code">flagged code</Gloss>
+          </h3>
+          <p className="muted small">the new checkout's own code</p>
           <div className="count" aria-label={`${state.counted} counted of ${threshold}`}>
             {skeleton ? '·' : state.counted}
             <small> / {threshold}</small>
           </div>
+          <p className="muted small counts-note">counts; the flag goes off above {threshold}</p>
           <div className="slots">
             {slots.map((n) => {
               const tag = counted[n - 1];
@@ -125,15 +132,18 @@ export function Board({ board, ctl, selected, onPick, calm, record, skeleton }: 
           </div>
         </div>
         <div className="lane right">
-          <h3>In a dependency or the server</h3>
-          <p className="muted small">Does not count</p>
+          <h3>
+            In a <Gloss term="dependency">dependency</Gloss> or the server
+          </h3>
+          <p className="muted small">database, other services, the server</p>
           <div className="count dep">{skeleton ? '·' : restCount}</div>
+          <p className="muted small counts-note">does not count</p>
           <div className="pile">
             {rest.slice(0, PILE_CAP).map((t, i) => (
               <Glyph key={t.id} tag={t} n={i + 1} onPick={onPick} selected={selected.id === t.id} plain />
             ))}
             {rest.length > PILE_CAP ? <span className="more">+{rest.length - PILE_CAP} more</span> : null}
-            {rest.length === 0 && !skeleton && !board.liveHistory ? <span className="muted small">Nothing has failed outside the flagged code.</span> : null}
+            {rest.length === 0 && !skeleton && !board.liveHistory ? <span className="muted small">No failures outside the flagged code.</span> : null}
           </div>
           {board.liveHistory && rest.length === 0 && !skeleton ? <RateStrip history={board.liveHistory} /> : null}
         </div>
@@ -151,12 +161,7 @@ export function Board({ board, ctl, selected, onPick, calm, record, skeleton }: 
           <p className="muted small">{board.tags.length === 0 ? 'No request has failed yet.' : 'Select a tag to see where that request failed.'}</p>
         )}
       </div>
-      <div className="plain">
-        <b>Plain error-rate rule</b>
-        <span>
-          {plainRuleLine(board, finished)} {alibiLine(board)}
-        </span>
-      </div>
+      <SimplerRules board={board} finished={finished} />
       {record ? null : <Controls board={board} ctl={ctl} />}
     </div>
   );

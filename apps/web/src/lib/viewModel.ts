@@ -12,7 +12,7 @@ export interface Tag {
   origins: OriginSpan[];
 }
 
-export type MomentKey = 'plain-rule' | 'threshold' | 'switched-off' | 'recovered' | 'label';
+export type MomentKey = 'plain-rule' | 'arm-rule' | 'threshold' | 'switched-off' | 'recovered' | 'label';
 
 export interface Moment {
   key: MomentKey;
@@ -94,6 +94,8 @@ export function momentOf(event: GuardEvent, baseMs: number): Moment | undefined 
   switch (event.type) {
     case 'plain-rule-tripped':
       return { key: 'plain-rule', atMs, text: 'The plain rule trips' };
+    case 'arm-rule-tripped':
+      return { key: 'arm-rule', atMs, text: 'The arm comparison trips' };
     case 'threshold-crossed':
       return { key: 'threshold', atMs, text: `The counter passes ${event.threshold}` };
     case 'switched-off':

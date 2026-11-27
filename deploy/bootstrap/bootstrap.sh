@@ -153,6 +153,16 @@ if [ "$(call GET "environments/$ENV_KEY/experiments/$EXPERIMENT_ID/" | jq -r .st
   call POST "environments/$ENV_KEY/experiments/$EXPERIMENT_ID/start/" > /dev/null
 fi
 
+# Feature Health (beta): a webhook provider lets Alibi mark the flag unhealthy, with its reason, after a switch-off.
+# Flagsmith answers with a secret address; Alibi gets its path, on the address it uses for everything else.
+# A Flagsmith without the feature just leaves this out and Alibi runs without it.
+say "feature health webhook"
+HEALTH_PATH=$(call GET "projects/$PROJECT_ID/feature-health/providers/" 2>/dev/null | items | jq -r '[.[] | select(.name == "Webhook")][0].webhook_url // empty' | sed -E 's#^https?://[^/]+##') || HEALTH_PATH=""
+if [ -z "$HEALTH_PATH" ]; then
+  HEALTH_PATH=$(call POST "projects/$PROJECT_ID/feature-health/providers/" '{"name":"Webhook"}' 2>/dev/null | jq -r '.webhook_url // empty' | sed -E 's#^https?://[^/]+##') || HEALTH_PATH=""
+fi
+[ -n "$HEALTH_PATH" ] || say "feature health is not available in this Flagsmith; continuing without it"
+
 say "writing $SHARED/flagsmith.env and flagsmith.json"
 cat > "$SHARED/flagsmith.env.tmp" <<EOF
 FLAGSMITH_URL=http://127.0.0.1:8000
@@ -169,13 +179,13 @@ jq -n --arg u http://127.0.0.1:8000 --arg i http://flagsmith:8000 --arg ek "$ENV
   --arg flag "$FLAG" --arg stable "$STABLE" --arg variation "$VARIATION" \
   --argjson org "$ORG_ID" --argjson project "$PROJECT_ID" --argjson feature "$FEATURE_ID" \
   --argjson option "$OPTION_ID" --argjson experiment "$EXPERIMENT_ID" \
-  --argjson m1 "$M_COMPLETED" --argjson m2 "$M_FAILURE" --argjson m3 "$M_LATENCY" '{
+  --argjson m1 "$M_COMPLETED" --argjson m2 "$M_FAILURE" --argjson m3 "$M_LATENCY" --arg hp "$HEALTH_PATH" '{
     url: $u, internalUrl: $i, environmentKey: $ek, serverKey: $sk, masterKey: $mk,
     organisationId: $org, projectId: $project, flag: $flag, featureId: $feature,
     stableVariation: $stable, variation: $variation, variationOptionId: $option,
     experimentId: $experiment,
     metrics: {checkout_completed: $m1, flag_path_failure: $m2, checkout_latency_ms: $m3}
-  }' > "$SHARED/flagsmith.json.tmp"
+  } + (if $hp != "" then {featureHealthUrl: ($i + $hp)} else {} end)' > "$SHARED/flagsmith.json.tmp"
 chmod 644 "$SHARED"/flagsmith.env.tmp "$SHARED"/flagsmith.json.tmp
 mv "$SHARED/flagsmith.env.tmp" "$SHARED/flagsmith.env"
 mv "$SHARED/flagsmith.json.tmp" "$SHARED/flagsmith.json"

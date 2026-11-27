@@ -122,6 +122,19 @@ export class FlagsmithApi {
     return new FlagsmithError(this.redact(`${what} answered ${reply.status}${detail}`), reply.status >= 500 || reply.status === 429);
   }
 
+  /**
+   * Marks the guarded flag unhealthy in Flagsmith's Feature Health (beta), with a reason. The address holds a secret
+   * token, so it is never part of an error message. Throws on any answer but 200.
+   */
+  async postFeatureHealth(reason: { textBlocks: { title: string; text: string }[] }): Promise<void> {
+    const path = this.settings.featureHealthPath;
+    if (!path) throw new FlagsmithError('Feature Health is not set up', false);
+    const reply = await this.request('POST', path, {
+      body: { feature: this.guarded.flag, status: 'unhealthy', reason: { text_blocks: reason.textBlocks, url_blocks: [] } },
+    });
+    if (reply.status !== 200) throw this.failure('Flagsmith Feature Health', reply);
+  }
+
   /** The Flagsmith version, or undefined when it cannot be reached. */
   async version(): Promise<string | undefined> {
     try {

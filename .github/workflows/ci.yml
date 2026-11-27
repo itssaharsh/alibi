@@ -21,7 +21,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: npm install --workspace packages/core --no-audit --no-fund
+          cache: npm
+      - run: npm ci --workspace packages/core --no-audit --no-fund
       - run: npm run typecheck --workspace packages/core
       - run: npm test --workspace packages/core
       - run: npm run build --workspace packages/core
@@ -35,7 +36,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: npm install --workspace packages/core --workspace packages/guard --no-audit --no-fund
+          cache: npm
+      - run: npm ci --workspace packages/core --workspace packages/guard --no-audit --no-fund
       # The guard imports the engine's built output (file:../core), so the engine is built first.
       - run: npm run build --workspace packages/core
       - run: npm run typecheck --workspace packages/guard
@@ -50,7 +52,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: npm install --workspace apps/web --no-audit --no-fund
+          cache: npm
+      - run: npm ci --workspace apps/web --no-audit --no-fund
       - run: npm run typecheck --workspace apps/web
       - run: npm test --workspace apps/web
       - name: Build with the recorded runs
