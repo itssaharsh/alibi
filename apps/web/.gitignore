@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.dev-runs/
+public/runs/
+public/probe.json
+test-results/
+playwright-report/

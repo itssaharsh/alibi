@@ -1,0 +1,36 @@
+/* Alibi tokens, concept "Evidence Tag" (UI-SPEC.md). Light interface. Self-host fonts from Fontsource at build:
+   @fontsource-variable/bricolage-grotesque, @fontsource-variable/instrument-sans, @fontsource/jetbrains-mono (all OFL). */
+:root{
+  color-scheme: light;
+  --ff-display:"Bricolage Grotesque Variable","Bricolage Grotesque",system-ui,sans-serif;
+  --ff-body:"Instrument Sans Variable","Instrument Sans",system-ui,sans-serif;
+  --ff-mono:"JetBrains Mono",ui-monospace,monospace;
+  --canvas:oklch(98.6% .008 250); --surface-1:#FFFFFF; --surface-2:oklch(95.5% .014 250);
+  --surface-sunken:oklch(95.5% .014 250);
+  --line:oklch(90% .015 250); --line-input:oklch(58% .02 255);
+  --ink:oklch(20% .03 258); --ink-muted:oklch(46% .025 258);
+  /* the accent is the evidence tag: one job, a failure that counts, and the primary action's highlight */
+  --accent:oklch(86% .17 95); --accent-ink:oklch(24% .05 85);
+  --accent-hover:oklch(from var(--accent) calc(l - .06) c h); --accent-press:oklch(from var(--accent) calc(l - .12) c h);
+  --accent-container:color-mix(in oklch,var(--accent) 22%,var(--surface-1));
+  --focus:var(--ink);
+  --success:oklch(42% .11 155); --warning:oklch(45% .1 80); --danger:oklch(50% .19 28);
+  --danger-container:color-mix(in oklch,var(--danger) 8%,var(--surface-1));
+  /* data encodings: a request that failed on the flagged path / in a dependency or server / the stable version */
+  --data-counted:var(--accent); --data-dependency:oklch(50% .1 250); --data-stable:oklch(55% .1 160);
+  --r-sm:8px; --r-md:16px; --r-lg:22px;
+  --shadow-raised:inset 0 1px 0 #fff,0 1px 2px oklch(40% .04 260/.08),0 8px 24px -6px oklch(40% .05 260/.14);
+  --shadow-overlay:0 4px 8px oklch(40% .04 260/.06),0 24px 48px -12px oklch(40% .05 260/.22);
+  --shadow-1:0 1px 1px oklch(20% .02 260/.05),0 2px 4px oklch(20% .02 260/.05);
+  --shadow-2:0 1px 2px oklch(20% .02 260/.06),0 4px 8px oklch(20% .02 260/.06),0 12px 24px oklch(20% .02 260/.06);
+  --shadow-3:0 2px 4px oklch(20% .02 260/.06),0 12px 24px oklch(20% .02 260/.08),0 32px 64px oklch(20% .02 260/.12);
+  --edge-top:inset 0 1px 0 oklch(100% 0 0/.8);
+  --fs-display:clamp(48px,6.2vw,92px); /* off-scale hero size */
+  /* motion: precise, ease-out, no bounce except the tag landing */
+  --ease-out:cubic-bezier(.23,1,.32,1); --ease-out-quint:cubic-bezier(.22,1,.36,1); --ease-in-out:cubic-bezier(.77,0,.175,1);
+  --ease-drawer:cubic-bezier(.32,.72,0,1); --ease-enter:cubic-bezier(.05,.7,.1,1); --ease-exit:cubic-bezier(.3,0,.8,.15);
+  --dur-press:120ms; --dur-hover:150ms; --dur-pop:200ms; --dur-modal:280ms; --dur-exit:150ms; --dur-drawer:240ms; --dur-sheet:450ms; --dur-route:400ms;
+}
+[hidden]{display:none!important}
+::selection{background:var(--accent);color:var(--accent-ink)}
+.frame{position:relative}.frame::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px oklch(0% 0 0/.08);pointer-events:none}
