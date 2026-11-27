@@ -23,7 +23,7 @@ test('the live board draws a guard stream', async ({ page }) => {
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const port = (server.address() as { port: number }).port;
   try {
-    await page.goto(`/?live=http://127.0.0.1:${port}`);
+    await page.goto(`./?live=http://127.0.0.1:${port}`);
     await expect(page.locator('.count.dep')).toHaveText('4', { timeout: 15_000 });
     await expect(page.locator('.nav-cap')).toContainText('Live');
     await expect(page.locator('.pile .tag')).toHaveCount(2);
@@ -51,7 +51,7 @@ test('the live board shows the switch-off, the countdown and the label', async (
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const port = (server.address() as { port: number }).port;
   try {
-    await page.goto(`/?live=http://127.0.0.1:${port}`);
+    await page.goto(`./?live=http://127.0.0.1:${port}`);
     await expect(page.getByRole('timer')).toContainText(/\d:\d\d left/, { timeout: 15_000 });
     await expect(page.locator('.flag')).toContainText('off for everyone in Flagsmith');
     const first = await page.getByRole('timer').innerText();

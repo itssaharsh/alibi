@@ -1,4 +1,4 @@
-import type { FlatSpan, GuardEvent, GuardState, InvestigationRecord, Rates, TraceVerdict } from '@alibi/core';
+import type { FlagsmithExperimentSummary, FlatSpan, GuardEvent, GuardState, InvestigationRecord, Rates, TraceVerdict } from '@alibi/core';
 import { momentOf, tagOf, type Board, type Moment, type Tag, type TimelineLine } from './viewModel';
 
 /**
@@ -20,7 +20,7 @@ export interface Live {
 
 interface Payload {
   state: GuardState;
-  flagsmith?: { switchOff?: { requested: boolean; confirmed: boolean; detail: string } };
+  flagsmith?: { switchOff?: { requested: boolean; confirmed: boolean; detail: string }; results?: FlagsmithExperimentSummary };
   recent?: TraceVerdict[];
   timeline?: { atMs: number; text: string; failure?: boolean }[];
   records?: { id: string; label: string; openedAtMs: number }[];
@@ -78,6 +78,7 @@ export function connectLive(url: string, onBoard: (board: Board) => void, onDown
       timeline,
       ...(record ? { record } : {}),
       ...(liveRate ? { liveRate } : {}),
+      ...(payload.flagsmith?.results ? { flagsmith: { atMs: payload.flagsmith.results.readAtMs, detail: '', data: payload.flagsmith.results } } : {}),
     });
   };
 

@@ -25,7 +25,8 @@ export interface RunSummary {
   featured?: { id: string; spans: FlatSpan[] };
 }
 
-const base = (path: string): string => new URL(path, document.baseURI).toString();
+/** Every file the page loads goes through the base the site is served from. */
+const base = (path: string): string => new URL(import.meta.env.BASE_URL + path.replace(/^\//, ''), location.href).toString();
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(base(path));

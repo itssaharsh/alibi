@@ -115,3 +115,15 @@ describe.skipIf(!existsSync(realRun))('against the recorded coupon-bug run', () 
     expect(snap.timeline.some((t) => t.text === 'Carts with the SAVE10 coupon began (about 1 in 5).')).toBe(true);
   });
 });
+
+import { recordedResults } from './snapshots';
+
+describe('Flagsmith results are taken as recorded', () => {
+  const data = { experimentId: 1, readAtMs: 5, variations: [{ variation: 'stable', exposures: 10, metrics: [{ name: 'checkout_completed', value: 1, chanceToWin: 0.97, interval: [0.9, 1] as [number, number] }] }] };
+  it('keeps the detail and the numbers untouched, and ignores a failed reading', () => {
+    const header = buildRun('outage')[0]!;
+    const got = recordedResults([header, { kind: 'flagsmith', atMs: 9, what: 'results', ok: false, detail: 'no' }, { kind: 'flagsmith', atMs: 7, what: 'results', ok: true, detail: 'as of the switch-off', data }]);
+    expect(got).toEqual({ atMs: 7, detail: 'as of the switch-off', data });
+    expect(recordedResults([header])).toBeUndefined();
+  });
+});

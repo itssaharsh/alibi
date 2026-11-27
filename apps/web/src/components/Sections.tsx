@@ -158,6 +158,53 @@ export function FailingAndTrace({ board, selected, onPick }: { board: BoardData;
   );
 }
 
+/** Flagsmith's own numbers, as recorded: nothing computed, nothing rounded, absent cells left out. */
+export function FlagsmithNumbers({ board, small }: { board: BoardData; small?: boolean }) {
+  const f = board.record?.flagsmith ?? board.flagsmith?.data;
+  const detail = board.flagsmith?.detail;
+  return (
+    <div className={small ? 'card fsc' : ''}>
+      <h3>Flagsmith's numbers</h3>
+      {f ? (
+        <>
+          <div className="fs">
+            {f.variations.map((v) => (
+              <div key={v.variation}>
+                <span className="muted small">{v.variation}</span>
+                <p>
+                  <b>{v.exposures}</b> <span className="muted small">exposures</span>
+                </p>
+                <dl>
+                  {v.metrics.map((m) => (
+                    <div key={m.name} className="fs-m">
+                      <dt>{m.name.replace(/_/g, ' ')}</dt>
+                      <dd>
+                        {m.value}
+                        {m.lift !== undefined || m.chanceToWin !== undefined || m.interval ? (
+                          <small>
+                            {m.lift !== undefined ? `lift ${m.lift}` : ''}
+                            {m.chanceToWin !== undefined ? `${m.lift !== undefined ? ', ' : ''}chance to win ${m.chanceToWin}` : ''}
+                            {m.interval ? `${m.lift !== undefined || m.chanceToWin !== undefined ? ', ' : ''}interval ${m.interval[0]} to ${m.interval[1]}` : ''}
+                          </small>
+                        ) : null}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+          </div>
+          <p className="muted small fs-note">
+            From Flagsmith Experimentation, {detail ? `${detail} (${rel(board, f.readAtMs)} into the run)` : `read ${rel(board, f.readAtMs)} into the run`}.
+          </p>
+        </>
+      ) : (
+        <p className="muted">Flagsmith's numbers show here once the experiment has results.</p>
+      )}
+    </div>
+  );
+}
+
 export function Record({ board }: { board: BoardData }) {
   const r = board.record;
   if (!r) return null;
@@ -184,30 +231,7 @@ export function Record({ board }: { board: BoardData }) {
           </ul>
         </div>
         <div>
-          <h3>Flagsmith's numbers</h3>
-          {f ? (
-            <div className="fs">
-              {f.variations.map((v) => (
-                <div key={v.variation}>
-                  <span className="muted small">{v.variation}</span>
-                  <b>{v.exposures.toLocaleString('en')}</b> <span className="muted small">exposures</span>
-                  <ul>
-                    {v.metrics.map((m) => (
-                      <li key={m.name}>
-                        {m.name.replace(/_/g, ' ')}: {m.value}
-                        {m.lift !== undefined ? `, lift ${m.lift}` : ''}
-                        {m.chanceToWin !== undefined ? `, chance to win ${m.chanceToWin}` : ''}
-                        {m.interval ? `, interval ${m.interval[0]} to ${m.interval[1]}` : ''}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-              <p className="muted small fs-note">From Flagsmith Experimentation, read {rel(board, f.readAtMs)} into the run.</p>
-            </div>
-          ) : (
-            <p className="muted">Flagsmith's numbers show here once the experiment has results.</p>
-          )}
+          <FlagsmithNumbers board={board} />
         </div>
       </div>
       <h3>Compared with the stable version</h3>

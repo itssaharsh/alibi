@@ -1,0 +1,50 @@
+name: Pages
+
+# Builds the public page (the recorded runs replayed in the browser) and publishes it to GitHub Pages.
+# The build fails if a recorded run is missing, so a development run can never be deployed.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # The page uses the engine from source, so only the page's own dependencies are installed.
+      - name: Install
+        run: npm install --workspace apps/web --no-audit --no-fund
+      - name: Build
+        run: npm run build --workspace apps/web
+        env:
+          ALIBI_BASE: /alibi/
+          ALIBI_SITE_URL: https://itssaharsh.github.io/alibi/
+          VITE_REPO_URL: https://github.com/itssaharsh/alibi
+          ALIBI_REQUIRE_REAL_RUNS: '1'
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: apps/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

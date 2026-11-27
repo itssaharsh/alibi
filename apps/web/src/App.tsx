@@ -6,7 +6,7 @@ import type { Tag } from './lib/viewModel';
 import { lowerFirst } from './lib/format';
 import { REPO_URL } from './lib/copy';
 import { Board } from './components/Board';
-import { AuthorRule, Footer, FailingAndTrace, PlugIn, Record, VerdictCard, WatchBand } from './components/Sections';
+import { AuthorRule, Footer, FailingAndTrace, FlagsmithNumbers, PlugIn, Record, VerdictCard, WatchBand } from './components/Sections';
 
 export interface Selected {
   id?: string;
@@ -108,6 +108,7 @@ export function App() {
                 </div>
               ) : null}
               {board ? <WatchBand board={board} /> : null}
+              {board && !board.record && board.flagsmith && !params.record ? <FlagsmithNumbers board={board} small /> : null}
             </div>
             {board ? (
               <Board board={board} ctl={ctl} selected={selected} onPick={pick} calm={!playing || reduced} record={params.record || isLive} skeleton={skeleton} />

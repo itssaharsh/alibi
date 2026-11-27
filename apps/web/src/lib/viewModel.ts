@@ -1,4 +1,4 @@
-import type { CauseLabel, FlatSpan, GuardEvent, GuardState, InvestigationRecord, OriginSpan, TraceVerdict, FailureClass } from '@alibi/core';
+import type { CauseLabel, FlagsmithExperimentSummary, FlatSpan, GuardEvent, GuardState, InvestigationRecord, OriginSpan, TraceVerdict, FailureClass } from '@alibi/core';
 
 /** One failing request that had the flag on. Times are milliseconds from the start of the run. */
 export interface Tag {
@@ -40,6 +40,15 @@ export interface Snapshot {
   newMoments: Moment[];
   timeline: TimelineLine[];
   record?: InvestigationRecord;
+  /** Flagsmith's numbers once the run has recorded them, as recorded. */
+  flagsmith?: RecordedResults;
+}
+
+export interface RecordedResults {
+  atMs: number;
+  /** What the run said about the reading, for example `read at the end of the watch`. */
+  detail: string;
+  data: FlagsmithExperimentSummary;
 }
 
 export interface RunMeta {
@@ -59,6 +68,7 @@ export interface Board {
   moments: Moment[];
   timeline: TimelineLine[];
   record?: InvestigationRecord;
+  flagsmith?: RecordedResults;
   /** Live only: requests seen in the last second. */
   liveRate?: { requests: number; failures: number };
 }
@@ -121,6 +131,7 @@ export function boardFrom(meta: RunMeta, snapshot: Snapshot): Board {
     moments: snapshot.newMoments,
     timeline: snapshot.timeline,
     ...(snapshot.record ? { record: snapshot.record } : {}),
+    ...(snapshot.flagsmith ? { flagsmith: snapshot.flagsmith } : {}),
   };
 }
 
@@ -135,6 +146,7 @@ export function applySnapshot(board: Board, snapshot: Snapshot): Board {
     moments: snapshot.newMoments.length ? [...board.moments, ...snapshot.newMoments] : board.moments,
     timeline: snapshot.timeline,
     ...(snapshot.record ? { record: snapshot.record } : {}),
+    ...(snapshot.flagsmith ? { flagsmith: snapshot.flagsmith } : {}),
   };
 }
 

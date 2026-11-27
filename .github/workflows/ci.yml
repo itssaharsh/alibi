@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  engine:
+    name: Engine (packages/core)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm install --workspace packages/core --no-audit --no-fund
+      - run: npm run typecheck --workspace packages/core
+      - run: npm test --workspace packages/core
+      - run: npm run build --workspace packages/core
+
+  guard:
+    name: Guard (packages/guard)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm install --workspace packages/core --workspace packages/guard --no-audit --no-fund
+      # The guard imports the engine's built output (file:../core), so the engine is built first.
+      - run: npm run build --workspace packages/core
+      - run: npm run typecheck --workspace packages/guard
+      - run: npm test --workspace packages/guard
+
+  web:
+    name: Page (apps/web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm install --workspace apps/web --no-audit --no-fund
+      - run: npm run typecheck --workspace apps/web
+      - run: npm test --workspace apps/web
+      - name: Build with the recorded runs
+        run: npm run build --workspace apps/web
+        env:
+          ALIBI_BASE: /alibi/
+          ALIBI_SITE_URL: https://itssaharsh.github.io/alibi/
+          VITE_REPO_URL: https://github.com/itssaharsh/alibi
+          ALIBI_REQUIRE_REAL_RUNS: '1'
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      - name: End-to-end tests under the Pages path
+        working-directory: apps/web
+        env:
+          ALIBI_BASE: /alibi/
+          BASE_URL: http://127.0.0.1:4173/alibi/
+        run: |
+          npm run preview > preview.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:4173/alibi/ > /dev/null && break; sleep 1; done
+          npx playwright test
