@@ -4,7 +4,7 @@
 //
 //   node load/scenarios-matrix.mjs --commit <hash> [--rounds 3] [--only <scenario>]   the counted runs, each from a fresh stack
 //   node load/scenarios-matrix.mjs --dev <scenario> [--minutes N] [--no-fresh]         one development run, never counted
-//   node load/scenarios-matrix.mjs --analyse --commit <hash>                           write summary.json and RESULTS.md from the kept runs
+//   node load/scenarios-matrix.mjs --analyse --commit <hash> [--before-fix <summary.json>]   write summary.json and RESULTS.md from the kept runs
 //
 // Order: O1, O2, O3, O4, M1, M2, M3, H1, and again, so a stop part-way leaves complete rounds. Each run starts with
 // `down -v` and `up --wait` with deploy/docker-compose.downstream.yml, which holds Alibi in observe-only mode with the
@@ -16,6 +16,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { widestArmGap } from './arm-gap.mjs';
 
 const run = promisify(execFile);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -109,25 +110,8 @@ async function oneRun(scenario, dir, extra = [], { fresh = true } = {}) {
 
 // ---------------------------------------------------------------- scoring
 
-/** The largest gap between the versions, by the run's own arm rule (trailing window, minimum per arm), every second. */
-function widestGap(verdicts, header, untilMs = Infinity) {
-  const rule = header.config.armRule ?? { windowMs: 60_000, minRequestsPerArm: 20 };
-  const seen = verdicts.filter((v) => v.evaluation && v.endMs <= untilMs).sort((a, b) => a.endMs - b.endMs);
-  if (seen.length === 0) return 0;
-  const last = seen[seen.length - 1].endMs;
-  let best = 0;
-  for (let at = header.startedAtMs + rule.windowMs; at <= last + 3000; at += 1000) {
-    const inside = seen.filter((v) => v.endMs > at - rule.windowMs && v.endMs <= at);
-    const on = inside.filter((v) => v.flagOn);
-    const off = inside.filter((v) => !v.flagOn);
-    if (on.length < rule.minRequestsPerArm || off.length < rule.minRequestsPerArm) continue;
-    const rate = (list) => list.filter((v) => v.failed).length / list.length;
-    best = Math.max(best, (rate(on) - rate(off)) * 100);
-  }
-  return Math.round(best * 10) / 10;
-}
-
-const sec = (ms, startedAtMs) => (ms === undefined || ms === null ? null : Math.round((ms - startedAtMs) / 100) / 10);
+/** Seconds from the start of the run, to the millisecond; the tables print them with the engine's own formatter. */
+const sec = (ms, startedAtMs) => (ms === undefined || ms === null ? null : Math.round(ms - startedAtMs) / 1000);
 const countBy = (verdicts) => verdicts.reduce((acc, v) => ({ ...acc, [v.failureClass ?? 'unclassified']: (acc[v.failureClass ?? 'unclassified'] ?? 0) + 1 }), {});
 
 /** Replays a recording with the simple rule's margin set to `points`, whatever the header says. */
@@ -179,7 +163,8 @@ export function analyse(engine, scenario, info, text) {
     alibiAtS,
     rule20Acted: rule20AtS !== null,
     rule20AtS,
-    widestGapPoints: widestGap(result.verdicts, header),
+    widestGapPoints: widestArmGap(result.events, header).points,
+    notices: result.events.filter((e) => e.type === 'notice').map((e) => ({ kind: e.notice.kind ?? null, span: e.notice.span, atS: sec(e.atMs, startedAtMs), text: e.notice.text })),
     rule10AtS: sec(ten.state.armRuleTrippedAtMs, startedAtMs),
     plainRuleAtS: sec(result.state.plainRuleTrippedAtMs, startedAtMs),
     alibiRight: Boolean(crossed) === scenario.shouldAct,
@@ -201,7 +186,7 @@ function scoreEarlier(engine) {
     const result = engine.replayRun(lines);
     const header = lines[0];
     const off = result.state.switchedOffAtMs;
-    const gap = widestGap(result.verdicts, header, off ?? Infinity);
+    const gap = widestArmGap(result.events, header, { untilMs: off ?? Infinity }).points;
     const alibiActed = off !== undefined;
     rows.push({
       run: label,
@@ -231,8 +216,13 @@ function scoreEarlier(engine) {
 
 // ---------------------------------------------------------------- output
 
-const t = (v) => (v === null || v === undefined ? 'never' : `+${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, '0')}`);
+let formatRelative = () => '';
+const t = (v) => (v === null || v === undefined ? 'never' : formatRelative(v * 1000));
 const classes = (c) => (Object.keys(c).length === 0 ? '0' : Object.entries(c).map(([k, v]) => `${v} ${k}`).join(', '));
+const noticeCell = (notices) =>
+  notices.length === 0
+    ? 'none'
+    : notices.map((n) => `${n.kind === 'flagged-path-only' ? 'a dependency only the flagged path calls' : 'a shared dependency failing far more with the flag on'} (${n.span}) at ${t(n.atS)}`).join('; ');
 const verdictWord = (right) => (right ? 'right' : 'wrong');
 
 function totals(rows) {
@@ -254,12 +244,12 @@ export function resultsMarkdown(counted, voids, earlier, meta) {
     '',
     '## The counted runs',
     '',
-    '| Run | Scenario | Truth | New checkout failures | Stable failures | Alibi: count passed 15 | 20-point rule acted | Widest gap | Alibi | 20-point rule | 10-point rule (not scored) | Plain rule (not scored) |',
-    '|---|---|---|---|---|---|---|---|---|---|---|---|',
+    '| Run | Scenario | Truth | New checkout failures | Stable failures | Alibi: count passed 15 | 20-point rule acted | Widest gap (whole run) | Alibi | 20-point rule | 10-point rule (not scored) | Plain rule (not scored) | Notices |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
   ];
   for (const r of counted) {
     out.push(
-      `| ${r.id}-${r.round} | ${r.scenario} | ${r.truth} | ${classes(r.newCheckoutFailures)} | ${classes(r.stableFailures)} | ${r.alibiActed ? t(r.alibiAtS) : 'no'} | ${r.rule20Acted ? t(r.rule20AtS) : 'no'} | ${r.widestGapPoints} points | ${verdictWord(r.alibiRight)} | ${verdictWord(r.rule20Right)} | ${t(r.rule10AtS)} | ${t(r.plainRuleAtS)} |`,
+      `| ${r.id}-${r.round} | ${r.scenario} | ${r.truth} | ${classes(r.newCheckoutFailures)} | ${classes(r.stableFailures)} | ${r.alibiActed ? t(r.alibiAtS) : 'no'} | ${r.rule20Acted ? t(r.rule20AtS) : 'no'} | ${r.widestGapPoints} points | ${verdictWord(r.alibiRight)} | ${verdictWord(r.rule20Right)} | ${t(r.rule10AtS)} | ${t(r.plainRuleAtS)} | ${noticeCell(r.notices)} |`,
     );
   }
   out.push('', '## Totals', '', `| | Alibi right | Alibi wrong | 20-point rule right | 20-point rule wrong |`, '|---|---|---|---|---|');
@@ -272,6 +262,36 @@ export function resultsMarkdown(counted, voids, earlier, meta) {
     out.push(`| ${s.id} ${s.name} (${rows.length} runs) | ${x.alibi.right} | ${x.alibi.wrong} | ${x.rule20.right} | ${x.rule20.wrong} |`);
   }
   out.push('', '## Harness notes before the counted runs', '', ...HARNESS_NOTES.flatMap((n) => [n, '']));
+  out.push(
+    '## After the runs',
+    '',
+    'The recordings are unchanged. The tables were regenerated from them on 27 November, after the counted runs, to add the Notices column, to print every time with the engine\'s own formatter, and to compute the widest gap with one function (`load/arm-gap.mjs`) at the instants the engine evaluates its comparison. That moved the printed widest gaps by under 3 points in the counted runs, and no right or wrong changed. In the counted runs, each rule\'s "acted" time is the engine\'s own event, not derived from the gap column. In the table of the 18 earlier runs, scored after the fact, it is derived: the 20-point rule counts as having acted when the widest gap before Alibi\'s switch-off reached 20 points.',
+    '',
+  );
+  if (meta.beforeFix) {
+    const before = meta.beforeFix.counted;
+    const noticeText = (list) => (list.length === 0 ? 'none' : list.map((n) => `${n.kind === 'flagged-path-only' ? 'a dependency only the flagged path calls' : 'a shared dependency both versions call'} (${n.span}) at ${t(n.atS)}`).join('; '));
+    const rows = counted.filter((r) => noticeText(r.notices) !== noticeText(before.find((b) => b.id === r.id && b.round === r.round)?.notices ?? []));
+    const ignore = new Set(['notices']);
+    const changed = counted.flatMap((r) => {
+      const b = before.find((x) => x.id === r.id && x.round === r.round);
+      return Object.keys(r).filter((k) => !ignore.has(k) && JSON.stringify(r[k]) !== JSON.stringify(b?.[k])).map((k) => `${r.id}-${r.round} ${k}`);
+    });
+    out.push(
+      '### An engine defect found while analysing',
+      '',
+      'The engine identified a dependency by its span name, and the HTTP client spans for the tax service and the rules service are both named `GET`, so a call to the rules service was taken for a call both versions make. The engine now identifies a dependency by its name and its target. The recordings were replayed with the engine before and after the fix; the Notices column reads:',
+      '',
+      '| Run | Before the fix | After the fix |',
+      '|---|---|---|',
+      ...rows.map((r) => `| ${r.id}-${r.round} | ${noticeText(before.find((b) => b.id === r.id && b.round === r.round)?.notices ?? [])} | ${noticeText(r.notices)} |`),
+      '',
+      changed.length === 0
+        ? 'Comparing the two summaries, nothing else differs: no count, time or right or wrong changed, and every other column is the same.'
+        : `Comparing the two summaries, these also differ: ${changed.join(', ')}.`,
+      '',
+    );
+  }
   out.push('## Void runs', '');
   if (voids.length === 0) out.push('None.');
   else for (const v of voids) out.push(`- ${v.scenario}, attempt ${v.attempt}: ${v.reason}`);
@@ -293,7 +313,7 @@ export function resultsMarkdown(counted, voids, earlier, meta) {
     '',
     'Scored by the same definition, after the plan was written. Alibi acted when it switched the flag off. The 20-point rule counts as having acted when the widest gap between the versions, up to Alibi\'s switch-off (the whole run when it did not switch off), was at least 20 points.',
     '',
-    '| Run | Truth | Alibi acted | Widest gap before the switch-off | 20-point rule acted | Alibi | 20-point rule | 10-point rule (not scored) | Plain rule (not scored) |',
+    '| Run | Truth | Alibi acted | Widest gap (before Alibi\'s switch-off, whole run if none) | 20-point rule acted | Alibi | 20-point rule | 10-point rule (not scored) | Plain rule (not scored) |',
     '|---|---|---|---|---|---|---|---|---|',
   );
   for (const r of earlier) {
@@ -352,8 +372,10 @@ function writeAnalysis(engine, meta) {
 
 async function main() {
   const engine = await loadEngine();
+  formatRelative = engine.formatRelative;
   if (args.analyse) {
-    console.log(JSON.stringify(writeAnalysis(engine, { commit: args.commit ?? 'unknown' })));
+    const beforeFix = args['before-fix'] ? JSON.parse(readFileSync(resolve(args['before-fix']), 'utf8')) : undefined;
+    console.log(JSON.stringify(writeAnalysis(engine, { commit: args.commit ?? 'unknown', beforeFix })));
     return;
   }
   if (args.dev) {

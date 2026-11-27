@@ -21,12 +21,14 @@ const run = promisify(execFile);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const COMPOSE_FILE = join(ROOT, 'deploy', 'docker-compose.yml');
 // ALIBI_EXAMPLE_PROFILE=downstream adds the services of the outage scenarios (deploy/docker-compose.downstream.yml);
-// downstream-flaky also adds the file for the flaky database scenario (deploy/docker-compose.downstream-flaky.yml).
+// downstream-flaky also adds the file for the flaky database scenario (deploy/docker-compose.downstream-flaky.yml);
+// downstream-acting adds the file that takes Alibi out of observe-only mode (deploy/docker-compose.downstream-acting.yml).
 const PROFILE = process.env.ALIBI_EXAMPLE_PROFILE ?? '';
 const COMPOSE_FILES = [
   COMPOSE_FILE,
   ...(PROFILE.startsWith('downstream') ? [join(ROOT, 'deploy', 'docker-compose.downstream.yml')] : []),
   ...(PROFILE === 'downstream-flaky' ? [join(ROOT, 'deploy', 'docker-compose.downstream-flaky.yml')] : []),
+  ...(PROFILE === 'downstream-acting' ? [join(ROOT, 'deploy', 'docker-compose.downstream-acting.yml')] : []),
 ];
 const FLAGSMITH_JSON = join(ROOT, 'deploy', 'data', 'shared', 'flagsmith.json');
 
@@ -478,7 +480,8 @@ async function runScenario(name, args) {
   const minutes = Number(args.minutes ?? scenario.minutes);
   const totalMs = minutes * 60_000;
   const out = args.out ? resolve(args.out) : undefined;
-  await armAlibi(scenario.record);
+  // --name, --title and --planted give the recording another name, title and sentence than the scenario's own.
+  await armAlibi({ ...scenario.record, ...(args.name ? { name: args.name } : {}), ...(args.title ? { title: args.title } : {}), ...(args.planted ? { planted: args.planted } : {}) });
   console.log(`Watch it live at http://127.0.0.1:4173 (the board), Flagsmith at http://127.0.0.1:8000, traces at http://127.0.0.1:16686.`);
   const world = makeWorld(out);
   const traffic = makeTraffic({ rps, ...(scenario.couponShare ? { couponShare: scenario.couponShare } : {}) });

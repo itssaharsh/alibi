@@ -5,7 +5,7 @@
 //   node load/repeat.mjs [--n 5] [--only outage|coupon-bug|degraded-host] [--resume]
 //   node load/repeat.mjs --add-plain <dir>   (adds the runs of a flag that is not in an experiment: <dir>/<scenario>/state.json and
 //                                             <dir>/<scenario>/<run name>.jsonl, kept under "withoutExperiment" in summary.json)
-//   node load/repeat.mjs --regap <plain evidence dir>   (recomputes the largest arm gap of every row from the kept run files)
+//   node load/repeat.mjs --regap <plain evidence dir>   (recomputes the times and the widest gap of every row from the kept run files)
 //   node load/repeat.mjs --analyse <run file> --scenario <name> [--state <state.json>]   (no stack needed)
 //
 // For every run: `docker compose down -v`, `up -d --build --wait`, the scenario at 2 requests a second (the run arms the
@@ -20,6 +20,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { widestArmGap } from './arm-gap.mjs';
 
 const run = promisify(execFile);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -52,28 +53,7 @@ async function loadEngine() {
   }
 }
 
-const seconds = (ms, startedAtMs) => (ms === undefined ? null : Math.round((ms - startedAtMs) / 100) / 10);
-
-/**
- * The largest gap, in percentage points, between the flag-on and stable error rates, by the engine's own definition: the
- * run's arm rule (trailing window, at least this many completed requests in each arm), looked at every second.
- */
-function largestArmGap(verdicts, header) {
-  const rule = header.config.armRule ?? { windowMs: 60_000, minRequestsPerArm: 20 };
-  const seen = verdicts.filter((v) => v.evaluation).sort((a, b) => a.endMs - b.endMs);
-  if (seen.length === 0) return 0;
-  const last = seen[seen.length - 1].endMs;
-  let best = 0;
-  for (let at = header.startedAtMs + rule.windowMs; at <= last + 3000; at += 1000) {
-    const inside = seen.filter((v) => v.endMs > at - rule.windowMs && v.endMs <= at);
-    const on = inside.filter((v) => v.flagOn);
-    const off = inside.filter((v) => !v.flagOn);
-    if (on.length < rule.minRequestsPerArm || off.length < rule.minRequestsPerArm) continue;
-    const rate = (list) => list.filter((v) => v.failed).length / list.length;
-    best = Math.max(best, (rate(on) - rate(off)) * 100);
-  }
-  return Math.round(best * 10) / 10;
-}
+const seconds = (ms, startedAtMs) => (ms === undefined ? null : Math.round(ms - startedAtMs) / 1000);
 
 function chanceToWin(summary) {
   const out = {};
@@ -103,7 +83,7 @@ export function outcomeOf(engine, text, liveState) {
     label: state.label ?? null,
     plainRuleAtS: seconds(state.plainRuleTrippedAtMs, startedAtMs),
     armRuleAtS: seconds(state.armRuleTrippedAtMs, startedAtMs),
-    largestArmGapPoints: largestArmGap(result.verdicts, result.header),
+    largestArmGapPoints: widestArmGap(result.events, result.header, { untilMs: state.switchedOffAtMs ?? Infinity }).points,
     flagsmithChanceToWin: chanceToWin(result.record?.flagsmith ?? recordedResults ?? liveState?.flagsmith?.results),
     flagsmithResultsRead: Boolean(result.record?.flagsmith ?? recordedResults ?? liveState?.flagsmith?.results),
   };
@@ -157,7 +137,8 @@ async function oneRun(scenario, n, engine) {
 
 const cell = (value) => (value === null || value === undefined ? 'none' : String(value));
 const classes = (counts) => (Object.keys(counts).length === 0 ? '0' : Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(', '));
-const t = (value) => (value === null ? 'never' : `+${Math.floor(value / 60)}:${String(Math.round(value % 60)).padStart(2, '0')}`);
+let formatRelative = () => '';
+const t = (value) => (value === null ? 'never' : formatRelative(value * 1000));
 
 export function markdown(rows, extras = {}) {
   const out = [
@@ -165,7 +146,7 @@ export function markdown(rows, extras = {}) {
     '',
     `Each row is one run of a scenario at 2 requests a second from a fresh stack (Flagsmith ${[...new Set(rows.map((r) => r.flagsmithVersion))].join(', ')}). Times are from the start of the run. The full run files are not in the repository; \`summary.json\` has every number below.`,
     '',
-    '| Scenario | Run | Flag-on failures | Stable failures | Counted | Switched off | Recovered | Label | Plain rule | Arm comparison | Largest arm gap | Chance to win, completed / latency | Replay = live |',
+    '| Scenario | Run | Flag-on failures | Stable failures | Counted | Switched off | Recovered | Label | Plain rule | Arm comparison | Widest gap (before Alibi\'s switch-off, whole run if none) | Chance to win, completed / latency | Replay = live |',
     '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
   ];
   for (const r of rows) {
@@ -182,7 +163,7 @@ export function markdown(rows, extras = {}) {
       '',
       'The same scenarios against a flag that is not in an experiment (the example started with `ALIBI_EXAMPLE_MODE=plain`): Alibi disables the flag instead of setting a rollout to 0%, sends no experiment events and reads no experiment numbers. One run each, at 2 requests a second from a fresh stack.',
       '',
-      '| Scenario | Flag-on failures | Stable failures | Counted | Disabled | Recovered | Label | Plain rule | Arm comparison | Largest arm gap | Replay = live |',
+      '| Scenario | Flag-on failures | Stable failures | Counted | Disabled | Recovered | Label | Plain rule | Arm comparison | Widest gap (before Alibi\'s switch-off, whole run if none) | Replay = live |',
       '|---|---|---|---|---|---|---|---|---|---|---|',
     );
     for (const r of plain) {
@@ -219,6 +200,7 @@ function save(rows, extras) {
 
 async function main() {
   const engine = await loadEngine();
+  formatRelative = engine.formatRelative;
   if (args.analyse) {
     const text = readFileSync(resolve(args.analyse), 'utf8');
     const live = args.state ? JSON.parse(readFileSync(resolve(args.state), 'utf8')) : undefined;
@@ -226,10 +208,14 @@ async function main() {
     return;
   }
   if (args.regap) {
-    // Recomputes only the largest arm gap of every row in summary.json from the run files kept as evidence.
+    // Recomputes the times and the widest gap of every row in summary.json from the run files kept as evidence.
     const names = { outage: 'outage', 'coupon-bug': 'coupon-bug', 'degraded-host': 'slow-host' };
     const stored = readSummary();
-    const fix = (row, file) => ({ ...row, largestArmGapPoints: outcomeOf(engine, readFileSync(file, 'utf8')).largestArmGapPoints });
+    const fix = (row, file) => {
+      const o = outcomeOf(engine, readFileSync(file, 'utf8'));
+      const { switchedOffAtS, recoveredAtS, plainRuleAtS, armRuleAtS, largestArmGapPoints } = o;
+      return { ...row, switchedOffAtS, recoveredAtS, plainRuleAtS, armRuleAtS, largestArmGapPoints };
+    };
     const runs = stored.runs.map((r) => fix(r, join(EVIDENCE, `${r.scenario}-${r.run}`, `${names[r.scenario]}.jsonl`)));
     const plainDir = resolve(args.regap);
     const withoutExperiment = (stored.extras.withoutExperiment ?? []).map((r) => fix(r, join(plainDir, r.scenario, `${names[r.scenario]}.jsonl`)));

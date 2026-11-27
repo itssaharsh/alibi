@@ -1,0 +1,7 @@
+# Added to docker-compose.downstream.yml for recordings in which Alibi acts as it normally does: with this file it is not
+# in observe-only mode, so it switches the flag off when its count passes 15. The simple rule's margin stays at 20 points
+# (deploy/downstream-rules.json).
+services:
+  alibi:
+    environment:
+      ALIBI_OBSERVE_ONLY: '0'
