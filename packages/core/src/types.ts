@@ -113,6 +113,29 @@ export interface GuardConfig {
   tolerance: RecoveryTolerance;
   /** The comparator: a plain error-rate rule run on the same requests. */
   plainRule: { windowMs: number; minRequests: number; errorRate: number };
+  /**
+   * The second comparator: the flag-on arm against the stable arm. A run file written before it
+   * existed has none, and the defaults apply.
+   */
+  armRule?: ArmRule;
+}
+
+export interface ArmRule {
+  /** Trailing window both arms are measured over. */
+  windowMs: number;
+  /** Fewest completed requests each arm needs for the comparison to count. */
+  minRequestsPerArm: number;
+  /** The flag-on error rate must exceed the stable one by at least this many percentage points. */
+  errorRatePoints: number;
+}
+
+/** Said once per span: failures in a dependency that only the flagged path calls. It is not a count. */
+export interface Notice {
+  atMs: number;
+  /** The dependency span's name. */
+  span: string;
+  failures: number;
+  text: string;
 }
 
 export type CauseLabel = 'probably the feature' | 'probably not the feature';
@@ -162,12 +185,24 @@ export interface GuardState {
   label?: CauseLabel;
   /** When the plain error-rate rule would have switched the flag off, if it would have. */
   plainRuleTrippedAtMs?: number;
+  /** When the arm comparison would have switched the flag off, if it would have. */
+  armRuleTrippedAtMs?: number;
+  notices?: Notice[];
   lastSpanAtMs?: number;
 }
 
 export type GuardEvent =
   | { type: 'verdict'; atMs: number; verdict: TraceVerdict; counted: number }
   | { type: 'plain-rule-tripped'; atMs: number; errorRate: number; requests: number }
+  | {
+      type: 'arm-rule-tripped';
+      atMs: number;
+      flagOnErrorRate: number;
+      flagOnRequests: number;
+      stableErrorRate: number;
+      stableRequests: number;
+    }
+  | { type: 'notice'; atMs: number; notice: Notice }
   | { type: 'threshold-crossed'; atMs: number; counted: number; threshold: number }
   | { type: 'switched-off'; atMs: number; confirmed: boolean; detail: string }
   | { type: 'watch-started'; atMs: number; endsAtMs: number; stableBaseline: Rates; stableBaselineWindow?: StableBaselineWindow }
@@ -188,6 +223,9 @@ export interface InvestigationRecord {
   notCounted: { dependency: number; server: number; mixed: number };
   stableBaseline: Rates;
   stableBaselineWindow?: StableBaselineWindow;
+  plainRuleTrippedAtMs?: number;
+  armRuleTrippedAtMs?: number;
+  notices?: Notice[];
   afterSwitchOff: Rates;
   recoveredAtMs?: number;
   baseline: BaselineRow[];

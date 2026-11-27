@@ -1,5 +1,6 @@
 import type { GuardConfig, GuardEvent, Rates, StableBaselineWindow } from './types.js';
 import type { ReplayResult } from './replay.js';
+import { DEFAULT_ARM_RULE } from './guard.js';
 import { formatMs } from './stats.js';
 
 export interface TimelineEntry {
@@ -52,6 +53,13 @@ export function describeEvent(event: GuardEvent, config: GuardConfig): TimelineE
         atMs: event.atMs,
         text: `Plain error-rate rule: would have switched the flag off here, ${percent(event.errorRate)} of ${event.requests} flag-on requests failed in ${Math.round(config.plainRule.windowMs / 1000)} seconds.`,
       };
+    case 'arm-rule-tripped':
+      return {
+        atMs: event.atMs,
+        text: `Arm comparison (flag on against stable): would have switched the flag off here, flag on ${percent(event.flagOnErrorRate)} against stable ${percent(event.stableErrorRate)} over the last ${Math.round((config.armRule?.windowMs ?? DEFAULT_ARM_RULE.windowMs) / 1000)} seconds.`,
+      };
+    case 'notice':
+      return { atMs: event.atMs, text: `Notice: ${event.notice.text}` };
     case 'threshold-crossed':
       return {
         atMs: event.atMs,
@@ -90,9 +98,16 @@ export function formatReport(result: ReplayResult): string {
   lines.push(`  Not counted: ${notCounted.dependency} from a dependency, ${notCounted.server} from the server, ${notCounted.mixed} mixed`);
   lines.push(
     state.plainRuleTrippedAtMs === undefined
-      ? '  Plain error-rate rule: would not have switched anything off'
+      ? '  Plain error-rate rule: would not have switched the flag off.'
       : `  Plain error-rate rule: would have switched the flag off at ${formatRelative(state.plainRuleTrippedAtMs - header.startedAtMs)}`,
   );
+  const armTrip = result.events.find((event) => event.type === 'arm-rule-tripped');
+  lines.push(
+    state.armRuleTrippedAtMs === undefined || armTrip?.type !== 'arm-rule-tripped'
+      ? '  Arm comparison (flag on against stable): would not have switched the flag off.'
+      : `  Arm comparison (flag on against stable): would have switched the flag off at ${formatRelative(state.armRuleTrippedAtMs - header.startedAtMs)}, flag on ${percent(armTrip.flagOnErrorRate)} against stable ${percent(armTrip.stableErrorRate)} over the last ${Math.round((state.config.armRule?.windowMs ?? DEFAULT_ARM_RULE.windowMs) / 1000)} seconds.`,
+  );
+  for (const notice of state.notices ?? []) lines.push(`  Notice: ${notice.text}`);
   if (state.label) {
     lines.push(`  Result: ${state.label} (not proven). A person investigates.`);
   } else if (state.phase === 'switching-off') {

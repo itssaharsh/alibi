@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { formatReport } from '../src/format.js';
+import { formatReport, formatRelative } from '../src/format.js';
 import { readRun } from '../src/node.js';
 import { recordToMarkdown } from '../src/record.js';
 import { createReplayer, replayRun, type ReplayResult } from '../src/replay.js';
@@ -48,6 +48,21 @@ function sentenceCounts(r: ReplayResult, pick: (v: ReplayResult['verdicts'][numb
   return counts;
 }
 
+/** When each of the three acted, relative to the start of the run. */
+function actedAt(r: ReplayResult): { plain?: string; arm?: string; count?: string } {
+  const at = (type: string) => {
+    const e = r.events.find((event) => event.type === type);
+    return e ? formatRelative(e.atMs - r.header.startedAtMs) : undefined;
+  };
+  return { plain: at('plain-rule-tripped'), arm: at('arm-rule-tripped'), count: at('threshold-crossed') };
+}
+
+function armTrip(r: ReplayResult) {
+  const e = r.events.find((event) => event.type === 'arm-rule-tripped');
+  if (e?.type !== 'arm-rule-tripped') throw new Error('the arm comparison did not trip');
+  return e;
+}
+
 describe.skipIf(!existsSync(runs))('the recorded runs, against their answer keys', () => {
   it('outage: the database is down, every failure is a dependency, the flag stays on', () => {
     const r = replayBoth('outage');
@@ -70,6 +85,14 @@ describe.skipIf(!existsSync(runs))('the recorded runs, against their answer keys
     expect(r.state.label).toBeUndefined();
     expect(r.record).toBeUndefined();
     expect(r.state.plainRuleTrippedAtMs).toBeDefined();
+    // Honest result: both arms failed in the outage, but the flag-on arm by a little more over the window.
+    expect(actedAt(r)).toEqual({ plain: '+01:16', arm: '+01:22', count: undefined });
+    const arm = armTrip(r);
+    expect([arm.flagOnRequests, arm.stableRequests]).toEqual([46, 66]);
+    expect(arm.flagOnErrorRate).toBeCloseTo(18 / 46);
+    expect(arm.stableErrorRate).toBeCloseTo(19 / 66);
+    expect(r.state.notices).toBeUndefined();
+    expect(formatReport(r)).toContain('Arm comparison (flag on against stable): would have switched the flag off at +01:22, flag on 39.1% against stable 28.8% over the last 60 seconds.');
     expectNoCauseWording(r);
   });
 
@@ -99,6 +122,13 @@ describe.skipIf(!existsSync(runs))('the recorded runs, against their answer keys
     const row = r.record?.baseline[0];
     expect(row?.spanExistsInStable).toBe(false);
     expect(row?.flagOn.failures).toBe(flagOnFailures.length);
+    expect(actedAt(r)).toEqual({ plain: '+01:58', arm: '+01:58', count: '+02:29' });
+    const arm = armTrip(r);
+    expect([arm.flagOnRequests, arm.stableRequests, arm.stableErrorRate]).toEqual([49, 66, 0]);
+    expect(arm.flagOnErrorRate).toBeCloseTo(5 / 49);
+    expect(r.state.notices).toBeUndefined();
+    expect(r.record?.armRuleTrippedAtMs).toBe(r.state.armRuleTrippedAtMs);
+    expect(recordToMarkdown(r.record as NonNullable<typeof r.record>)).toContain('## Two simpler rules on the same requests');
     expectNoCauseWording(r);
   });
 
@@ -124,6 +154,11 @@ describe.skipIf(!existsSync(runs))('the recorded runs, against their answer keys
     const stable = r.state.stableBaseline;
     expect(after?.errorRate).toBe(0);
     expect(after?.p95Ms).toBeGreaterThan((stable?.p95Ms ?? Infinity) * 1.25 * 2);
+    expect(actedAt(r)).toEqual({ plain: '+01:36', arm: '+01:36', count: '+01:48' });
+    const arm = armTrip(r);
+    expect([arm.flagOnRequests, arm.stableRequests, arm.stableErrorRate]).toEqual([62, 53, 0]);
+    expect(arm.flagOnErrorRate).toBeCloseTo(7 / 62);
+    expect(r.state.notices).toBeUndefined();
     expectNoCauseWording(r);
   });
 });

@@ -1,4 +1,5 @@
 import type {
+  ArmRule,
   CauseLabel,
   GuardConfig,
   GuardEvent,
@@ -13,6 +14,11 @@ import { emptyRates, makeRates } from './stats.js';
 /** Floating point slack so a rate exactly on the limit passes. */
 const EPSILON = 1e-9;
 
+/** Failures in a flagged-path-only dependency before a notice is raised. */
+const NOTICE_AFTER = 5;
+
+export const DEFAULT_ARM_RULE: ArmRule = { windowMs: 60000, minRequestsPerArm: 20, errorRatePoints: 10 };
+
 export function defaultConfig(flag: string, stableVariation: string): GuardConfig {
   return {
     flag,
@@ -21,6 +27,7 @@ export function defaultConfig(flag: string, stableVariation: string): GuardConfi
     watchMs: 300000,
     tolerance: { windowMs: 60000, minRequests: 20, errorRatePoints: 2, p95Factor: 1.25 },
     plainRule: { windowMs: 30000, minRequests: 20, errorRate: 0.2 },
+    armRule: { ...DEFAULT_ARM_RULE },
   };
 }
 
@@ -44,6 +51,13 @@ interface GuardMemory {
   stableBefore: Sample[];
   /** When the earliest counted failure ended; the stable level is measured up to here. */
   firstCountedMs?: number;
+  /** Both arms inside the arm comparison's trailing window. */
+  armFlagOn: Sample[];
+  armStable: Sample[];
+  /** Names of spans the stable version has run. */
+  stableSpans: string[];
+  /** Flag-on requests lost to an unavailable dependency on the flagged path, by span name. */
+  flaggedDependencyFailures: Record<string, number>;
   flagOnDurations: number[];
   stableDurations: number[];
 }
@@ -80,6 +94,10 @@ export class Guard {
       plainWindow: [],
       afterSwitchOff: [],
       stableBefore: [],
+      armFlagOn: [],
+      armStable: [],
+      stableSpans: [],
+      flaggedDependencyFailures: {},
       flagOnDurations: [],
       stableDurations: [],
     };
@@ -126,7 +144,15 @@ export class Guard {
       s.totals[group].failures += verdict.failed ? 1 : 0;
       (verdict.flagOn ? this.m.flagOnDurations : this.m.stableDurations).push(verdict.durationMs);
       this.totalsStale = true;
-      if (verdict.flagOn) this.m.plainWindow.push(sample);
+      if (verdict.flagOn) {
+        this.m.plainWindow.push(sample);
+        this.m.armFlagOn.push(sample);
+      } else {
+        this.m.armStable.push(sample);
+        for (const point of verdict.points ?? []) {
+          if (!this.m.stableSpans.includes(point.name)) this.m.stableSpans.push(point.name);
+        }
+      }
       if (!verdict.flagOn && (s.phase === 'armed' || s.phase === 'switching-off')) {
         this.m.stableBefore.push(sample);
       }
@@ -144,6 +170,8 @@ export class Guard {
 
     events.push({ type: 'verdict', atMs: nowMs, verdict, counted: s.counted });
     this.checkPlainRule(nowMs, events);
+    this.checkArmRule(nowMs, events);
+    this.checkNotice(verdict, nowMs, events);
     if (s.phase === 'armed' && s.counted > s.config.threshold) {
       s.phase = 'switching-off';
       events.push({ type: 'threshold-crossed', atMs: nowMs, counted: s.counted, threshold: s.config.threshold });
@@ -155,6 +183,7 @@ export class Guard {
   tick(nowMs: number): GuardEvent[] {
     const events: GuardEvent[] = [];
     this.checkPlainRule(nowMs, events);
+    this.checkArmRule(nowMs, events);
     this.watch(nowMs, events);
     return events;
   }
@@ -208,6 +237,61 @@ export class Guard {
     s.plainRuleTrippedAtMs = nowMs;
     this.m.plainWindow = [];
     events.push({ type: 'plain-rule-tripped', atMs: nowMs, errorRate, requests });
+  }
+
+  /**
+   * What the flag-on arm against the stable arm would have done. It stops once the flag is off,
+   * because there is no flag-on arm after that. It never acts.
+   */
+  private checkArmRule(nowMs: number, events: GuardEvent[]): void {
+    const s = this.s;
+    if (s.armRuleTrippedAtMs !== undefined) return;
+    if (s.phase !== 'armed' && s.phase !== 'switching-off') return;
+    const rule = s.config.armRule ?? DEFAULT_ARM_RULE;
+    const inWindow = (sample: Sample) => sample.t > nowMs - rule.windowMs;
+    this.m.armFlagOn = this.m.armFlagOn.filter(inWindow);
+    this.m.armStable = this.m.armStable.filter(inWindow);
+    const on = this.m.armFlagOn;
+    const stable = this.m.armStable;
+    if (on.length < rule.minRequestsPerArm || stable.length < rule.minRequestsPerArm) return;
+    const flagOnErrorRate = on.filter((sample) => sample.f).length / on.length;
+    const stableErrorRate = stable.filter((sample) => sample.f).length / stable.length;
+    if (flagOnErrorRate - stableErrorRate < rule.errorRatePoints / 100 - EPSILON) return;
+    s.armRuleTrippedAtMs = nowMs;
+    this.m.armFlagOn = [];
+    this.m.armStable = [];
+    events.push({
+      type: 'arm-rule-tripped',
+      atMs: nowMs,
+      flagOnErrorRate,
+      flagOnRequests: on.length,
+      stableErrorRate,
+      stableRequests: stable.length,
+    });
+  }
+
+  /**
+   * Failures in a dependency that only the flagged path calls never count, but a person should
+   * hear about them once per span.
+   */
+  private checkNotice(verdict: TraceVerdict, nowMs: number, events: GuardEvent[]): void {
+    if (!verdict.evaluation || !verdict.flagOn || !verdict.failed || verdict.failureClass !== 'dependency') return;
+    const s = this.s;
+    const names = new Set(verdict.origins.filter((o) => o.class === 'dependency' && o.onFlaggedPath).map((o) => o.name));
+    for (const span of names) {
+      const failures = (this.m.flaggedDependencyFailures[span] ?? 0) + 1;
+      this.m.flaggedDependencyFailures[span] = failures;
+      const known = (s.notices ?? []).some((notice) => notice.span === span);
+      if (failures < NOTICE_AFTER || known || this.m.stableSpans.includes(span)) continue;
+      const notice = {
+        atMs: nowMs,
+        span,
+        failures,
+        text: `${failures} requests with the flag on failed in ${span}, a dependency that only the flagged path calls and that was unavailable. By the rule these do not count toward the switch-off. The stable version never makes this call, so a person should look.`,
+      };
+      s.notices = [...(s.notices ?? []), notice];
+      events.push({ type: 'notice', atMs: nowMs, notice });
+    }
   }
 
   private watch(nowMs: number, events: GuardEvent[]): void {

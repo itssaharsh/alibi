@@ -31,6 +31,9 @@ export function buildRecord(
     notCounted: { ...state.notCounted },
     stableBaseline,
     ...(state.stableBaselineWindow ? { stableBaselineWindow: state.stableBaselineWindow } : {}),
+    ...(state.plainRuleTrippedAtMs === undefined ? {} : { plainRuleTrippedAtMs: state.plainRuleTrippedAtMs }),
+    ...(state.armRuleTrippedAtMs === undefined ? {} : { armRuleTrippedAtMs: state.armRuleTrippedAtMs }),
+    ...(state.notices && state.notices.length > 0 ? { notices: state.notices.map((n) => ({ ...n })) } : {}),
     afterSwitchOff: makeRates(
       after.map((v) => v.durationMs),
       after.filter((v) => v.failed).length,
@@ -72,6 +75,25 @@ export function recordToMarkdown(record: InvestigationRecord): string {
       : `- Error rate and latency returned to the stable version's level at ${clock(record.recoveredAtMs)} UTC.`,
     '',
   );
+
+  out.push('## Two simpler rules on the same requests', '');
+  out.push('They never switch anything. They show what a simpler breaker would have done with the same requests.', '');
+  out.push(
+    record.plainRuleTrippedAtMs === undefined
+      ? '- Plain error-rate rule (flag-on requests only): would not have switched the flag off.'
+      : `- Plain error-rate rule (flag-on requests only): would have switched the flag off at ${clock(record.plainRuleTrippedAtMs)} UTC.`,
+  );
+  out.push(
+    record.armRuleTrippedAtMs === undefined
+      ? '- Arm comparison (flag on against stable): would not have switched the flag off.'
+      : `- Arm comparison (flag on against stable): would have switched the flag off at ${clock(record.armRuleTrippedAtMs)} UTC.`,
+    '',
+  );
+  if (record.notices) {
+    out.push('## Notices', '');
+    for (const notice of record.notices) out.push(`- ${notice.text}`);
+    out.push('');
+  }
 
   out.push('## Same failing points, flag on against stable', '');
   if (record.baseline.length === 0) {

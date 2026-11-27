@@ -33,7 +33,7 @@ describe('replayRun', () => {
     expect(r.state.label).toBe('probably the feature');
     expect(r.events.filter((e) => e.type === 'threshold-crossed')).toHaveLength(1);
     expect(r.record?.label).toBe('probably the feature');
-    const order = r.events.map((e) => e.type).filter((t) => t !== 'verdict' && t !== 'plain-rule-tripped');
+    const order = r.events.map((e) => e.type).filter((t) => t !== 'verdict' && t !== 'plain-rule-tripped' && t !== 'arm-rule-tripped');
     expect(order).toEqual(['threshold-crossed', 'switched-off', 'watch-started', 'recovered', 'labelled']);
   });
 

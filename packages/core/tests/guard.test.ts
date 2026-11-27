@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { defaultConfig, Guard, recordIdFor } from '../src/guard.js';
 import type { GuardEvent } from '../src/types.js';
-import { config, FLAG, makeVerdict, START, STABLE } from './fixtures.js';
+import { judgeTrace } from '../src/judge.js';
+import { checkoutTrace, config, faults, FLAG, makeVerdict, START, STABLE, V2 } from './fixtures.js';
 
 const types = (events: GuardEvent[]) => events.map((e) => e.type);
 
@@ -35,6 +36,7 @@ describe('defaults', () => {
       watchMs: 300000,
       tolerance: { windowMs: 60000, minRequests: 20, errorRatePoints: 2, p95Factor: 1.25 },
       plainRule: { windowMs: 30000, minRequests: 20, errorRate: 0.2 },
+      armRule: { windowMs: 60000, minRequestsPerArm: 20, errorRatePoints: 10 },
     });
   });
 });
@@ -319,5 +321,120 @@ describe('state', () => {
     const guard = new Guard(config());
     feed(guard, 20, START, (i, at) => makeVerdict({ endMs: at, variation: STABLE, durationMs: i + 1 }));
     expect(guard.state.totals.stable.p95Ms).toBe(19);
+  });
+});
+
+describe('the arm comparison', () => {
+  /** Feeds a flag-on and a stable request each second; the flag-on one fails when `onFails(i)`. */
+  function arms(guard: Guard, n: number, from: number, onFails: (i: number) => boolean, stableFails: (i: number) => boolean = () => false) {
+    const events: GuardEvent[] = [];
+    for (let i = 0; i < n; i += 1) {
+      const at = from + i * 1000;
+      events.push(...guard.ingest(makeVerdict({ endMs: at, failed: onFails(i), failureClass: 'dependency' }), at));
+      events.push(...guard.ingest(makeVerdict({ endMs: at, variation: STABLE, failed: stableFails(i), failureClass: 'dependency' }), at));
+    }
+    return events;
+  }
+
+  it('trips when the flag-on arm fails ten points more than the stable arm, and never switches anything', () => {
+    const guard = new Guard(config());
+    const events = arms(guard, 40, START, (i) => i % 3 === 0);
+    const tripped = events.find((e) => e.type === 'arm-rule-tripped');
+    expect(tripped).toMatchObject({ flagOnRequests: 20, stableRequests: 20, stableErrorRate: 0 });
+    expect(tripped && 'flagOnErrorRate' in tripped && tripped.flagOnErrorRate).toBeCloseTo(7 / 20);
+    expect(types(events).filter((t) => t === 'arm-rule-tripped')).toHaveLength(1);
+    expect(guard.state.armRuleTrippedAtMs).toBeDefined();
+    expect(guard.state.phase).toBe('armed');
+    expect(guard.state.counted).toBe(0);
+  });
+
+  it('stays quiet when both arms fail alike, as in an outage that hits everyone equally', () => {
+    const guard = new Guard(config());
+    arms(guard, 100, START, () => true, () => true);
+    expect(guard.state.armRuleTrippedAtMs).toBeUndefined();
+  });
+
+  it('needs the minimum requests in both arms', () => {
+    const guard = new Guard(config());
+    arms(guard, 19, START, () => true);
+    expect(guard.state.armRuleTrippedAtMs).toBeUndefined();
+  });
+
+  it('forgets requests older than its window', () => {
+    const guard = new Guard(config());
+    arms(guard, 19, START, () => true);
+    guard.tick(START + 200_000);
+    arms(guard, 1, START + 200_000, () => true);
+    expect(guard.state.armRuleTrippedAtMs).toBeUndefined();
+  });
+
+  it('stops once the flag is switched off', () => {
+    const { guard, at } = crossed();
+    guard.confirmSwitchOff(at, true, 'ok');
+    arms(guard, 40, at + 1000, () => true);
+    expect(guard.state.armRuleTrippedAtMs).toBeUndefined();
+  });
+
+  it('uses the defaults when a run header has no arm rule', () => {
+    const { armRule: _omitted, ...older } = config();
+    const guard = new Guard(older);
+    arms(guard, 40, START, () => true);
+    expect(guard.state.armRuleTrippedAtMs).toBeDefined();
+  });
+});
+
+describe('the notice for a dependency only the feature calls', () => {
+  const refusedFromFlaggedPath = (n: number, at = START + n * 1000) => {
+    const v = judgeTrace(checkoutTrace({ n, startMs: at, variation: V2, faults: [faults.dbRefused('price-query')] }), config());
+    if (!v) throw new Error('no verdict');
+    return v;
+  };
+  const SENTENCE =
+    '5 requests with the flag on failed in pg.query:SELECT price, a dependency that only the flagged path calls and that was unavailable. By the rule these do not count toward the switch-off. The stable version never makes this call, so a person should look.';
+
+  it('fires once at five failures, says so in words, and does not count', () => {
+    const guard = new Guard(config());
+    const events: GuardEvent[] = [];
+    for (let n = 1; n <= 12; n += 1) {
+      const v = refusedFromFlaggedPath(n);
+      events.push(...guard.ingest(v, v.endMs));
+    }
+    const notices = events.filter((e) => e.type === 'notice');
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({ notice: { span: 'pg.query:SELECT price', failures: 5, text: SENTENCE } });
+    expect(guard.state.notices).toHaveLength(1);
+    expect(guard.state.counted).toBe(0);
+    expect(guard.state.phase).toBe('armed');
+  });
+
+  it('does not fire before five', () => {
+    const guard = new Guard(config());
+    for (let n = 1; n <= 4; n += 1) guard.ingest(refusedFromFlaggedPath(n), START + n * 1000);
+    expect(guard.state.notices).toBeUndefined();
+  });
+
+  it('does not fire when the stable version also runs that span', () => {
+    const guard = new Guard(config());
+    const stable = { ...makeVerdict({ endMs: START, variation: STABLE }), points: [{ name: 'pg.query:SELECT price', durationMs: 5, error: false }] };
+    guard.ingest(stable, START);
+    for (let n = 1; n <= 10; n += 1) guard.ingest(refusedFromFlaggedPath(n), START + n * 1000);
+    expect(guard.state.notices).toBeUndefined();
+  });
+
+  it('does not fire for dependency failures outside the flagged path', () => {
+    const guard = new Guard(config());
+    for (let n = 1; n <= 10; n += 1) {
+      const v = judgeTrace(checkoutTrace({ n, startMs: START + n * 1000, variation: V2, faults: [faults.dbRefused('shop-query')] }), config());
+      if (v) guard.ingest(v, v.endMs);
+    }
+    expect(guard.state.notices).toBeUndefined();
+  });
+
+  it('survives a JSON round trip', () => {
+    const guard = new Guard(config());
+    for (let n = 1; n <= 5; n += 1) guard.ingest(refusedFromFlaggedPath(n), START + n * 1000);
+    const restored = Guard.restore(JSON.parse(JSON.stringify(guard.snapshot())));
+    expect(restored.state.notices).toEqual(guard.state.notices);
+    for (let n = 6; n <= 9; n += 1) expect(types(restored.ingest(refusedFromFlaggedPath(n), START + n * 1000))).toEqual(['verdict']);
   });
 });
