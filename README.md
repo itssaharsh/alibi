@@ -4,9 +4,9 @@ Alibi switches a Flagsmith feature off only when the feature's own code is faili
 
 [![The database outage: 97 failures with the flag on, 0 counted, the flag stays on](docs/img/first-screen.png)](https://itssaharsh.github.io/alibi/)
 
-**[Live page](https://itssaharsh.github.io/alibi/)** (no sign-in; recorded runs replayed in your browser) · **[Run it yourself](#quickstart-run-it-yourself)** (three commands) · Track 03, Build on Open Source Flagsmith
+**[Live page](https://itssaharsh.github.io/alibi/)** (no sign-in; recorded runs replayed in your browser) · **[Demo video](https://itssaharsh.github.io/alibi/alibi-demo.mp4)** (2:50) · **[Run it yourself](#quickstart-run-it-yourself)** (three commands) · Track 03, Build on Open Source Flagsmith
 
-**In 24 runs whose scenarios and scoring were committed before any of them ran (outages of a shared service, of a service only the feature calls, a flaky database, bugs in the feature), Alibi made the right call 24 times. A rule that compares the two versions at a 20-point margin made it 17 times.** Three of that rule's seven misses depend on what you call infrastructure, and on the 18 runs before these the two rules tie. [The numbers](#the-numbers-against-two-simpler-rules) say all of it.
+**In 24 runs whose scenarios and scoring were committed before any of them ran (outages of a shared service, of a service only the feature calls, a flaky database, bugs in the feature), Alibi made the right call 24 times. A rule that compares the two versions at a 20-point margin made it 17 times.** Three of those runs turn on what you call infrastructure: leave them out and it is 21 of 21 against 17 of 21; score them the other way and it is 21 against 20. On the 18 runs before these the two rules tie. [The numbers](#the-numbers-against-two-simpler-rules) say all of it.
 
 ## The problem
 
@@ -23,7 +23,6 @@ These ran on a real stack: self-hosted Flagsmith 2.295.2, a shop instrumented wi
 | **The database outage** | The database was stopped for 90 seconds | 97 requests with the flag on failed. All 97 failed in `pg.connect`, a dependency call. Alibi counted 0 and left the flag on |
 | **The coupon bug** | Carts with a coupon crash inside `checkout_v2.apply_coupon` | Counted each one. At the 16th it set the rollout to 0% in Flagsmith and confirmed 20 of 20 identities got the stable checkout. Errors and latency were back at the stable version's level a minute later. Label: **probably the feature** |
 | **The slow host** | The shop's CPU was throttled to a twentieth of a core | The new checkout's own time budget failed 16 times, so the flag went off. Errors stopped, but p95 latency stayed at 330 ms against a stable level of 42 ms. Label: **probably not the feature** |
-
 | **The feature's own service goes down** | A service that only the new checkout calls was stopped for 90 seconds | 97 requests with the flag on failed, all in `GET rules:3000`, a dependency call. Alibi counted 0, left the flag on, and seven seconds in raised a notice: the stable version never makes this call, so a person should look. A rule comparing the two versions at a 20-point margin would have switched the feature off at +01:43 |
 | **The rare bug** | 1 cart in 20 crashes inside `checkout_v2.apply_coupon` | Neither simpler rule ever acts: the error rate stays too low. Alibi counts each failure, reaches the 16th at +09:02, sets the rollout to 0% and confirms 20 of 20. Back at the stable level a minute later. Label: **probably the feature** |
 
@@ -243,7 +242,7 @@ What was done to the stack is the truth. If only infrastructure was broken, the 
 
 Read it honestly:
 
-- **Three of the simple rule's seven misses are a matter of definition.** When a service that only the feature uses is down, the author's rule calls that infrastructure, so acting is scored wrong. A team that would rather switch a feature off when its own dependency is down would score those three runs the other way: Alibi 21 of 24, the simple rule 20 of 24. In those runs Alibi left the flag on and raised a notice at +01:39, +01:38 and +01:43, sooner than the simple rule acted: "the stable version never makes this call, so a person should look". (That notice needed an engine fix these runs exposed: two services behind the same span name were taken for one. The results file shows it before and after; no count or decision changed.)
+- **Three of the simple rule's seven misses are a matter of definition.** When a service that only the feature uses is down, the author's rule calls that infrastructure, so acting is scored wrong. A team that would rather switch a feature off when its own dependency is down would score those three runs the other way: Alibi 21 of 24, the simple rule 20 of 24. Leave the three out altogether and it is Alibi 21 of 21, the simple rule 17 of 21. In those runs Alibi left the flag on and raised a notice at +01:39, +01:38 and +01:43, sooner than the simple rule acted: "the stable version never makes this call, so a person should look". (That notice needed an engine fix these runs exposed: two services behind the same span name were taken for one. The results file shows it before and after; no count or decision changed.)
 - **Three are the rare bug.** A bug that fails 1 request in 20 never opens a 20-point gap between the versions. A count of failures in the feature's own code gets to 16 regardless, here after 4 to 7 minutes. That is the other side of the limit below: the count has no time window.
 - **One is noise.** At 1 request a second there are about 30 requests in each version per minute, and during a shared outage the gap between them reached 20.1 points by chance.
 - **Where both were right, neither was reliably sooner.** In the six runs with an outage and a bug together, Alibi acted first in four and the simple rule in two.
@@ -318,10 +317,10 @@ Limits worth knowing before you rely on it:
 - **A dependency that only the new code calls.** If it is down, those failures do not count, because the rule calls that infrastructure. Alibi raises a notice instead ("the stable version never makes this call, so a person should look"); it does not switch the flag off. Three of the planned runs are this case. If you would rather switch off there, Alibi's rule is the wrong rule for you.
 - **A feature that breaks something shared.** If the new code overloads the database for everyone, every failure is a dependency failure in both versions, and by the rule none of them count. Alibi raises a notice when a shared dependency fails far more often with the flag on than in the stable version (30 points apart, at least 20 requests each), because the rule asks for that comparison. If both versions fail alike, nothing tells it apart from an outage, and a person has to catch it.
 - **It needs a stable arm.** The level that "recovered" is tested against comes from requests that got the stable version, so a flag that is on for everyone has nothing to compare with.
-- **Forty-four runs of one scripted shop.** They are recorded and repeatable, not a study of real traffic.
+- **Forty-four runs of one scripted shop.** They are recorded and repeatable, not a study of real traffic. The comparison is against the two simpler rules named above; other baselines, such as a sequential test or acting on Flagsmith's own experiment result, were not run.
 
 ## Built with
 
-Built during Toggle Wars, 27 to 29 November 2026. AI coding assistants wrote most of the code under my direction. The guardrail rule, and the calls on what counts, are mine.
+Built during Toggle Wars (26 to 29 November 2026); the first commit is from 27 November. AI coding assistants wrote most of the code under my direction. The guardrail rule, and the calls on what counts, are mine.
 
 MIT licence.
