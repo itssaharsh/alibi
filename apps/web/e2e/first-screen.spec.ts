@@ -73,7 +73,7 @@ test('two simpler rules are shown beside Alibi, in the engine\'s words, on every
   await expect(card).toContainText('Plain error-rate rule: would have switched the flag off here', { useInnerText: true });
   await expect(card).toContainText('Arm comparison (flag on against stable): would have switched the flag off here, flag on 39.1% against stable 28.8% over the last 60 seconds.', { useInnerText: true });
   await expect(card).toContainText('Alibi counted 0 of 97, so the flag stays on. 97 failed in a dependency.', { useInnerText: true });
-  await expect(page.getByText('Both simpler rules would have switched it off: at +01:16 and +01:22.')).toBeVisible();
+  await expect(page.getByText('A plain rule and a 10-point comparison would have switched it off: at +01:16 and +01:22.')).toBeVisible();
   await expect(card).not.toContainText('acted sooner');
 
   await page.goto('./?run=coupon-bug');

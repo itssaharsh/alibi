@@ -204,3 +204,4 @@ a.f-row{text-decoration:none;color:inherit}
 .plug pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
 .plug .steps>div{min-width:0}
 @media(min-width:901px){.plug .steps{grid-template-columns:1fr 1.3fr 1fr}}
+@media(max-width:900px){.verdict .v-line span{font-size:14px;line-height:1.4}}

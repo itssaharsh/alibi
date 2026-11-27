@@ -25,7 +25,7 @@ describe('the view model reads the engine and adds nothing', () => {
     const two = simplerRules(board, true);
     expect(two.rules[0]!.text).toMatch(/^Plain error-rate rule: would have switched the flag off here, /);
     expect(two.rules[1]!.text).toMatch(/^Arm comparison \(flag on against stable\): would (not )?have switched the flag off/);
-    expect(simplerRulesShort(board, true)).toMatch(/^(Both simpler rules|The plain error-rate rule) would have switched it off/);
+    expect(simplerRulesShort(board, true)).toMatch(/^(A plain rule and a \d+-point comparison|A plain rule) would have switched it off/);
     expect(alibiLine(board, true)).toContain(`Alibi counted 0 of ${snap.state.totals.flagOn.failures}, so the flag stays on.`);
     expect(snap.record).toBeUndefined();
   });
@@ -142,7 +142,7 @@ describe.skipIf(!existsSync(realOutage))('against the recorded outage run', () =
     const two = simplerRules(board, true);
     expect(two.rules.map((x) => x.at)).toEqual(['+01:16', '+01:22']);
     expect(two.rules[1]!.text).toBe('Arm comparison (flag on against stable): would have switched the flag off here, flag on 39.1% against stable 28.8% over the last 60 seconds.');
-    expect(simplerRulesShort(board, true)).toBe('Both simpler rules would have switched it off: at +01:16 and +01:22.');
+    expect(simplerRulesShort(board, true)).toBe('A plain rule and a 10-point comparison would have switched it off: at +01:16 and +01:22.');
     expect(two.alibi).toMatch(/^Alibi counted 0 of 97, so the flag stays on\./);
     expect(two.sooner).toBeUndefined();
   });

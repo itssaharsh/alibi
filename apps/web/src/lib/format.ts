@@ -70,9 +70,11 @@ export function simplerRules(board: Board, finished: boolean): { rules: SimplerR
 export function simplerRulesShort(board: Board, finished: boolean): string {
   const p = board.state.plainRuleTrippedAtMs;
   const a = board.state.armRuleTrippedAtMs;
-  if (p !== undefined && a !== undefined) return `Both simpler rules would have switched it off: at ${rel(board, p)} and ${rel(board, a)}.`;
-  if (p !== undefined) return `The plain error-rate rule would have switched it off at ${rel(board, p)}.`;
-  if (a !== undefined) return `The arm comparison would have switched it off at ${rel(board, a)}.`;
+  // The comparison is named by the margin this run was read at, so it cannot be mistaken for the 20-point rule.
+  const arm = `${(board.state.config.armRule ?? DEFAULT_ARM_RULE).errorRatePoints}-point comparison`;
+  if (p !== undefined && a !== undefined) return `A plain rule and a ${arm} would have switched it off: at ${rel(board, p)} and ${rel(board, a)}.`;
+  if (p !== undefined) return `A plain rule would have switched it off at ${rel(board, p)}.`;
+  if (a !== undefined) return `A ${arm} would have switched it off at ${rel(board, a)}.`;
   return finished ? 'Neither simpler rule would have switched it off.' : 'Two simpler rules are watching the same requests.';
 }
 
