@@ -6,6 +6,7 @@ import { runCli } from '../src/command.js';
 import { formatReport } from '../src/format.js';
 import { readRun } from '../src/node.js';
 import { createReplayer, parseRun, replayRun, RunFileError, serialiseRun } from '../src/replay.js';
+import { makeRates } from '../src/stats.js';
 import { buildRun } from './fixtures.js';
 
 describe('replayRun', () => {
@@ -44,6 +45,40 @@ describe('replayRun', () => {
     expect(r.state.label).toBe('probably not the feature');
     expect(r.state.plainRuleTrippedAtMs).toBeDefined();
     expect(r.record?.label).toBe('probably not the feature');
+  });
+
+  it('slow host: the stable level is the healthy one from before the trouble, so the label is "probably not the feature"', () => {
+    const r = replayRun(buildRun('slow-host'));
+    const baseline = r.state.stableBaseline;
+    expect(r.state.stableBaselineWindow).toBe('before-first-counted-failure');
+    expect(baseline?.errorRate).toBe(0);
+    expect(baseline?.p95Ms).toBeLessThanOrEqual(110);
+    expect(baseline?.requests).toBeGreaterThanOrEqual(20);
+    expect(r.state.counted).toBe(16);
+    expect(r.state.recoveredAtMs).toBeUndefined();
+    expect(r.state.label).toBe('probably not the feature');
+
+    // Measured up to the switch-off instead, the stable version is already slow and the run would have recovered.
+    const off = r.state.switchedOffAtMs as number;
+    const durations = r.verdicts.filter((v) => v.evaluation && !v.flagOn && v.endMs <= off).map((v) => v.durationMs);
+    const failures = r.verdicts.filter((v) => v.evaluation && !v.flagOn && v.endMs <= off && v.failed).length;
+    const old = makeRates(durations, failures);
+    expect(old.p95Ms).toBeGreaterThan(400);
+    const after = r.record?.afterSwitchOff as NonNullable<typeof r.record>['afterSwitchOff'];
+    expect(after.p95Ms).toBeLessThanOrEqual(old.p95Ms * 1.25);
+    expect(after.errorRate).toBeLessThanOrEqual(old.errorRate + 0.02);
+    expect(r.record?.stableBaselineWindow).toBe('before-first-counted-failure');
+    expect(r.timeline.some((e) => e.text.includes('Stable version level, measured before the first counted failure: 0.0% errors'))).toBe(true);
+  });
+
+  it('measures the stable level before the switch-off when too few stable requests came before the trouble', () => {
+    const lines = buildRun('feature-bug');
+    const header = lines[0];
+    if (header?.kind !== 'alibi-run') throw new Error('no header');
+    const early = { ...header, config: { ...header.config, tolerance: { ...header.config.tolerance, minRequests: 100000 } } };
+    const r = replayRun([early, ...lines.slice(1)]);
+    expect(r.state.stableBaselineWindow).toBe('before-switch-off');
+    expect(r.timeline.some((e) => e.text.includes('Stable version level, measured before the switch-off:'))).toBe(true);
   });
 
   it('confirms as not confirmed when the run recorded no answer', () => {

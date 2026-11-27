@@ -21,3 +21,10 @@ export function makeRates(durations: readonly number[], failures: number): Rates
 export function emptyRates(): Rates {
   return makeRates([], 0);
 }
+
+/** Milliseconds for people: under 1 ms, one decimal under 10 ms, whole milliseconds above. */
+export function formatMs(ms: number): string {
+  if (ms < 1) return 'under 1 ms';
+  if (ms < 9.95) return `${ms.toFixed(1)} ms`;
+  return `${Math.round(ms)} ms`;
+}

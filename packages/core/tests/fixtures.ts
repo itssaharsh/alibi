@@ -179,7 +179,7 @@ export function makeVerdict(o: VerdictOptions): TraceVerdict {
   };
 }
 
-export type RunName = 'outage' | 'feature-bug' | 'degraded-host';
+export type RunName = 'outage' | 'feature-bug' | 'degraded-host' | 'slow-host';
 
 /**
  * A synthetic run: four requests a second, half with the flag on, from a shop with an answer key.
@@ -188,7 +188,7 @@ export type RunName = 'outage' | 'feature-bug' | 'degraded-host';
  */
 export function buildRun(name: RunName): RunLine[] {
   const totalSeconds = name === 'outage' ? 240 : 480;
-  const trouble = 60;
+  const trouble = name === 'slow-host' ? 45 : 60;
   const lines: RunLine[] = [];
   let switchOffMs: number | undefined;
   let flagOnSeen = 0;
@@ -211,12 +211,12 @@ export function buildRun(name: RunName): RunLine[] {
       if (flagOnSeen % 3 === 0) planted.push(faults.coupon);
       flagOnSeen += 1;
     }
-    if (name === 'degraded-host' && second >= trouble) {
+    if ((name === 'degraded-host' || name === 'slow-host') && second >= trouble) {
       durationMs = 400 + (n % 7) * 5;
       if (variation === V2) {
         if (flagOnSeen % 2 === 0) planted.push(faults.budget);
         flagOnSeen += 1;
-      } else if (n % 7 === 0) {
+      } else if (name === 'degraded-host' ? n % 7 === 0 : n % 60 === 1) {
         planted.push(faults.tax);
       }
     }
@@ -256,14 +256,17 @@ const TITLES: Record<RunName, string> = {
   outage: 'The database outage',
   'feature-bug': 'The coupon bug',
   'degraded-host': 'The degraded host',
+  'slow-host': 'The slow host',
 };
 const PLANTED: Record<RunName, string> = {
   outage: 'The shop database refuses connections for 90 seconds.',
   'feature-bug': 'Carts with a coupon crash inside the new checkout.',
   'degraded-host': 'The host slows down and the new checkout runs out of its price budget.',
+  'slow-host': 'The host slows down for everyone after 45 seconds; the new checkout runs out of its price budget first.',
 };
 const WORLD: Record<RunName, string> = {
   outage: 'The shop database was stopped.',
   'feature-bug': 'The coupon bug started.',
   'degraded-host': 'The host started to slow down.',
+  'slow-host': 'The host started to slow down.',
 };

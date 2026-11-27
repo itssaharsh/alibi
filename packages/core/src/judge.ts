@@ -7,6 +7,7 @@ import type {
   OriginSpan,
   TraceVerdict,
 } from './types.js';
+import { formatMs } from './stats.js';
 
 /** The attribute the application puts on the span that wraps the feature's own code. */
 export const FLAGGED_PATH_ATTRIBUTE = 'alibi.flagged_path';
@@ -272,7 +273,7 @@ export function judgeTrace(spans: readonly FlatSpan[], config: GuardConfig): Tra
   };
 
   if (!failed) {
-    return { ...base, failed: false, origins: [], counted: false, reason: `Completed in ${Math.round(root.durationMs)} ms.` };
+    return { ...base, failed: false, origins: [], counted: false, reason: `Completed in ${formatMs(root.durationMs)}.` };
   }
 
   let originSpans = spans.filter((span) => span.error && !hasErrorBelow.has(span.spanId));

@@ -1,4 +1,13 @@
-import type { CauseLabel, GuardConfig, GuardEvent, GuardPhase, GuardState, Rates, TraceVerdict } from './types.js';
+import type {
+  CauseLabel,
+  GuardConfig,
+  GuardEvent,
+  GuardPhase,
+  GuardState,
+  Rates,
+  StableBaselineWindow,
+  TraceVerdict,
+} from './types.js';
 import { emptyRates, makeRates } from './stats.js';
 
 /** Floating point slack so a rate exactly on the limit passes. */
@@ -32,7 +41,9 @@ interface GuardMemory {
   /** Requests completed after the switch-off. */
   afterSwitchOff: Sample[];
   /** Stable-variation requests seen before the switch-off. */
-  stableBefore: { durations: number[]; failures: number };
+  stableBefore: Sample[];
+  /** When the earliest counted failure ended; the stable level is measured up to here. */
+  firstCountedMs?: number;
   flagOnDurations: number[];
   stableDurations: number[];
 }
@@ -68,7 +79,7 @@ export class Guard {
     this.m = {
       plainWindow: [],
       afterSwitchOff: [],
-      stableBefore: { durations: [], failures: 0 },
+      stableBefore: [],
       flagOnDurations: [],
       stableDurations: [],
     };
@@ -117,14 +128,16 @@ export class Guard {
       this.totalsStale = true;
       if (verdict.flagOn) this.m.plainWindow.push(sample);
       if (!verdict.flagOn && (s.phase === 'armed' || s.phase === 'switching-off')) {
-        this.m.stableBefore.durations.push(verdict.durationMs);
-        this.m.stableBefore.failures += verdict.failed ? 1 : 0;
+        this.m.stableBefore.push(sample);
       }
       if (s.phase === 'watching' && s.switchedOffAtMs !== undefined && verdict.endMs > s.switchedOffAtMs) {
         this.m.afterSwitchOff.push(sample);
       }
       if (s.phase === 'armed' && verdict.flagOn && verdict.failed) {
-        if (verdict.counted) s.counted += 1;
+        if (verdict.counted) {
+          s.counted += 1;
+          this.m.firstCountedMs = Math.min(this.m.firstCountedMs ?? verdict.endMs, verdict.endMs);
+        }
         else if (verdict.failureClass && verdict.failureClass !== 'flagged-path') s.notCounted[verdict.failureClass] += 1;
       }
     }
@@ -154,18 +167,32 @@ export class Guard {
     const s = this.s;
     if (s.phase !== 'switching-off') return [];
     if (!ok) return [{ type: 'switched-off', atMs: nowMs, confirmed: false, detail }];
-    const before = this.m.stableBefore;
-    const stableBaseline = makeRates(before.durations, before.failures);
+    const { rates: stableBaseline, window } = this.stableLevel();
     s.phase = 'watching';
     s.switchOffConfirmed = true;
     s.switchedOffAtMs = nowMs;
     s.stableBaseline = stableBaseline;
+    s.stableBaselineWindow = window;
     s.watchEndsAtMs = nowMs + s.config.watchMs;
-    this.m.stableBefore = { durations: [], failures: 0 };
+    this.m.stableBefore = [];
     return [
       { type: 'switched-off', atMs: nowMs, confirmed: true, detail },
-      { type: 'watch-started', atMs: nowMs, endsAtMs: s.watchEndsAtMs, stableBaseline },
+      { type: 'watch-started', atMs: nowMs, endsAtMs: s.watchEndsAtMs, stableBaseline, stableBaselineWindow: window },
     ];
+  }
+
+  /**
+   * The stable version's level from before the trouble started. On a slow host the stable version
+   * is slow too by the time the flag goes off, so measuring up to the switch-off would let a
+   * degraded host pass as recovered. Falls back to everything before the switch-off when too few
+   * stable requests came before the first counted failure.
+   */
+  private stableLevel(): { rates: Rates; window: StableBaselineWindow } {
+    const all = this.m.stableBefore;
+    const cutoff = this.m.firstCountedMs;
+    const early = cutoff === undefined ? [] : all.filter((sample) => sample.t < cutoff);
+    const useEarly = early.length >= this.s.config.tolerance.minRequests;
+    return { rates: ratesOf(useEarly ? early : all), window: useEarly ? 'before-first-counted-failure' : 'before-switch-off' };
   }
 
   /** What a plain error-rate breaker would have done with the same flag-on requests. It never acts. */

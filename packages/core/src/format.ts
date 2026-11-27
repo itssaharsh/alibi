@@ -1,5 +1,6 @@
-import type { GuardConfig, GuardEvent, Rates } from './types.js';
+import type { GuardConfig, GuardEvent, Rates, StableBaselineWindow } from './types.js';
 import type { ReplayResult } from './replay.js';
+import { formatMs } from './stats.js';
 
 export interface TimelineEntry {
   atMs: number;
@@ -26,8 +27,15 @@ function span(ms: number): string {
   return `${Math.round(ms / 1000)} seconds`;
 }
 
-function level(rates: Rates): string {
-  return `${percent(rates.errorRate)} errors, p95 ${Math.round(rates.p95Ms)} ms, ${rates.requests} requests`;
+/** `0.0% errors, p95 32 ms, 70 requests`. */
+export function describeLevel(rates: Rates): string {
+  return `${percent(rates.errorRate)} errors, p95 ${formatMs(rates.p95Ms)}, ${rates.requests} requests`;
+}
+
+export function stableLevelLabel(window: StableBaselineWindow | undefined): string {
+  return window === 'before-first-counted-failure'
+    ? 'Stable version level, measured before the first counted failure'
+    : 'Stable version level, measured before the switch-off';
 }
 
 /** One timeline line for an event, or nothing when the event is not worth a line. */
@@ -57,14 +65,14 @@ export function describeEvent(event: GuardEvent, config: GuardConfig): TimelineE
     case 'watch-started':
       return {
         atMs: event.atMs,
-        text: `Watch started for ${span(event.endsAtMs - event.atMs)}. Stable version level: ${level(event.stableBaseline)}.`,
+        text: `Watch started for ${span(event.endsAtMs - event.atMs)}. ${stableLevelLabel(event.stableBaselineWindow)}: ${describeLevel(event.stableBaseline)}.`,
       };
     case 'recovered':
-      return { atMs: event.atMs, text: `Error rate and latency are back at the stable version's level: ${level(event.after)}.` };
+      return { atMs: event.atMs, text: `Error rate and latency are back at the stable version's level: ${describeLevel(event.after)}.` };
     case 'labelled':
       return {
         atMs: event.atMs,
-        text: `Label: ${event.label} (not proven). A person investigates. After the switch-off: ${level(event.after)}. Record ${event.recordId}.`,
+        text: `Label: ${event.label} (not proven). A person investigates. After the switch-off: ${describeLevel(event.after)}. Record ${event.recordId}.`,
       };
   }
 }

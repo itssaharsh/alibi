@@ -137,6 +137,9 @@ export interface BaselineRow {
   why: string;
 }
 
+/** Which requests the stable level was measured over. */
+export type StableBaselineWindow = 'before-first-counted-failure' | 'before-switch-off';
+
 export type GuardPhase = 'armed' | 'switching-off' | 'watching' | 'closed';
 
 export interface GuardState {
@@ -149,6 +152,8 @@ export interface GuardState {
   totals: { flagOn: Rates; stable: Rates };
   /** Stable-version rates measured before the switch-off; the level recovery is tested against. */
   stableBaseline?: Rates;
+  /** Says which requests `stableBaseline` was measured over. */
+  stableBaselineWindow?: StableBaselineWindow;
   switchedOffAtMs?: number;
   /** True once Flagsmith confirmed the flag is off. */
   switchOffConfirmed: boolean;
@@ -165,7 +170,7 @@ export type GuardEvent =
   | { type: 'plain-rule-tripped'; atMs: number; errorRate: number; requests: number }
   | { type: 'threshold-crossed'; atMs: number; counted: number; threshold: number }
   | { type: 'switched-off'; atMs: number; confirmed: boolean; detail: string }
-  | { type: 'watch-started'; atMs: number; endsAtMs: number; stableBaseline: Rates }
+  | { type: 'watch-started'; atMs: number; endsAtMs: number; stableBaseline: Rates; stableBaselineWindow?: StableBaselineWindow }
   | { type: 'recovered'; atMs: number; after: Rates }
   | { type: 'labelled'; atMs: number; label: CauseLabel; after: Rates; recordId: string };
 
@@ -182,6 +187,7 @@ export interface InvestigationRecord {
   counted: number;
   notCounted: { dependency: number; server: number; mixed: number };
   stableBaseline: Rates;
+  stableBaselineWindow?: StableBaselineWindow;
   afterSwitchOff: Rates;
   recoveredAtMs?: number;
   baseline: BaselineRow[];

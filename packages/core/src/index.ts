@@ -7,4 +7,4 @@ export * from './baseline.js';
 export * from './record.js';
 export * from './replay.js';
 export * from './format.js';
-export { percentile95, makeRates } from './stats.js';
+export { percentile95, makeRates, formatMs } from './stats.js';

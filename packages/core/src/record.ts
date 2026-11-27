@@ -1,7 +1,8 @@
 import type { FlagsmithExperimentSummary, GuardState, InvestigationRecord, Rates, TraceVerdict } from './types.js';
 import { buildBaseline } from './baseline.js';
 import { recordIdFor } from './guard.js';
-import { makeRates } from './stats.js';
+import { describeLevel, stableLevelLabel } from './format.js';
+import { formatMs, makeRates } from './stats.js';
 
 export function buildRecord(
   state: GuardState,
@@ -29,6 +30,7 @@ export function buildRecord(
     counted: state.counted,
     notCounted: { ...state.notCounted },
     stableBaseline,
+    ...(state.stableBaselineWindow ? { stableBaselineWindow: state.stableBaselineWindow } : {}),
     afterSwitchOff: makeRates(
       after.map((v) => v.durationMs),
       after.filter((v) => v.failed).length,
@@ -48,7 +50,7 @@ const percent = (rate: number): string => `${(rate * 100).toFixed(1)}%`;
 const cell = (value: string | number): string => String(value).replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
 function ratesLine(rates: Rates): string {
-  return `${rates.requests} requests, ${rates.failures} failed (${percent(rates.errorRate)}), p95 ${Math.round(rates.p95Ms)} ms`;
+  return `${rates.requests} requests, ${rates.failures} failed (${percent(rates.errorRate)}), p95 ${formatMs(rates.p95Ms)}`;
 }
 
 export function recordToMarkdown(record: InvestigationRecord): string {
@@ -62,7 +64,7 @@ export function recordToMarkdown(record: InvestigationRecord): string {
   const { notCounted } = record;
   out.push(`- Counted: ${record.counted} failures with the flag on, inside the flagged path. The switch-off needs more than ${record.threshold}.`);
   out.push(`- Not counted: ${notCounted.dependency} from a dependency, ${notCounted.server} from the server, ${notCounted.mixed} mixed.`);
-  out.push(`- Stable version before the switch-off: ${ratesLine(record.stableBaseline)}.`);
+  out.push(`- ${stableLevelLabel(record.stableBaselineWindow)}: ${describeLevel(record.stableBaseline)}.`);
   out.push(`- Everyone after the switch-off, within the watch: ${ratesLine(record.afterSwitchOff)}.`);
   out.push(
     record.recoveredAtMs === undefined
@@ -78,8 +80,8 @@ export function recordToMarkdown(record: InvestigationRecord): string {
     out.push('| Route | Failing point | Flag on: requests / failed / p95 | Stable: requests / failed / p95 | Why it failed |');
     out.push('|---|---|---|---|---|');
     for (const row of record.baseline) {
-      const on = `${row.flagOn.requests} / ${row.flagOn.failures} / ${Math.round(row.flagOn.p95Ms)} ms`;
-      const off = `${row.stable.requests} / ${row.stable.failures} / ${Math.round(row.stable.p95Ms)} ms`;
+      const on = `${row.flagOn.requests} / ${row.flagOn.failures} / ${formatMs(row.flagOn.p95Ms)}`;
+      const off = `${row.stable.requests} / ${row.stable.failures} / ${formatMs(row.stable.p95Ms)}`;
       const stable = row.spanExistsInStable ? off : `${off} (the stable version does not run this span; compared at the route)`;
       out.push(`| ${cell(row.route)} | ${cell(row.span)} | ${on} | ${cell(stable)} | ${cell(row.why)} |`);
     }
