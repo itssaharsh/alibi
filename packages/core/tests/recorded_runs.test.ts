@@ -166,4 +166,73 @@ describe.skipIf(!existsSync(runs))('the recorded runs, against their answer keys
     expectNoNotices(r);
     expectNoCauseWording(r);
   });
+  it('service-outage: the rules service stops, only the feature calls it, the flag stays on with a notice', () => {
+    const r = replayBoth('service-outage');
+    const failing = r.verdicts.filter((v) => v.failed);
+    expect(failing).toHaveLength(97);
+    expect(failing.every((v) => v.flagOn)).toBe(true);
+    for (const v of failing) {
+      expect(v.failureClass).toBe('dependency');
+      expect(v.counted).toBe(false);
+      expect(v.origins.map((o) => o.label)).toEqual(['GET rules:3000']);
+      expect(v.origins.every((o) => o.onFlaggedPath)).toBe(true);
+    }
+    expect(r.state.counted).toBe(0);
+    expect(r.state.notCounted).toEqual({ dependency: 97, server: 0, mixed: 0 });
+    expect(r.events.filter((e) => e.type === 'switched-off' || e.type === 'threshold-crossed')).toEqual([]);
+    expect(r.state.phase).toBe('armed');
+    expect(r.state.switchedOffAtMs).toBeUndefined();
+    expect(r.state.label).toBeUndefined();
+    expect(r.record).toBeUndefined();
+    expect(actedAt(r)).toEqual({ plain: '+01:39', arm: '+01:43', count: undefined });
+    expect(r.header.config.armRule?.errorRatePoints).toBe(20);
+
+    const notices = r.events.filter((e) => e.type === 'notice');
+    expect(notices).toHaveLength(1);
+    const notice = r.state.notices?.[0];
+    expect(r.state.notices).toHaveLength(1);
+    expect(notice).toMatchObject({ kind: 'flagged-path-only', span: 'GET rules:3000', failures: 5 });
+    expect(formatRelative((notice?.atMs as number) - r.header.startedAtMs)).toBe('+01:37');
+    expect(notice?.text).toBe(
+      '5 requests with the flag on failed in GET rules:3000, a dependency that only the flagged path calls and that was unavailable. By the rule these do not count toward the switch-off. The stable version never makes this call, so a person should look.',
+    );
+    for (const sentence of Object.keys(sentenceCounts(r, (v) => v.failed))) {
+      expect(sentence).toMatch(
+        /^Failed in GET rules:3000, a dependency call \(server\.address=rules\): .+\. The dependency was unavailable, so this does not count\. It was called from the flagged path, but an unavailable dependency is infrastructure\.$/,
+      );
+    }
+    expectNoCauseWording(r);
+  });
+
+  it('rare-bug: sixteen failures, the flag goes off, the run recovers', () => {
+    const r = replayBoth('rare-bug');
+    const failing = r.verdicts.filter((v) => v.failed);
+    expect(failing).toHaveLength(16);
+    for (const v of failing) {
+      expect(v.flagOn).toBe(true);
+      expect(v.failureClass).toBe('flagged-path');
+      expect(v.counted).toBe(true);
+      expect(v.origins.map((o) => o.name)).toEqual(['checkout_v2.apply_coupon']);
+    }
+    expect(sentenceCounts(r, (v) => v.failed)).toEqual({
+      "Failed in checkout_v2.apply_coupon, a span on the flagged path: TypeError: Cannot read properties of undefined (reading 'percent'). Counts toward the switch-off.": 16,
+    });
+    expect(r.state.counted).toBe(16);
+    expect(r.state.notCounted).toEqual({ dependency: 0, server: 0, mixed: 0 });
+    const answers = r.events.filter((e) => e.type === 'switched-off');
+    expect(answers).toHaveLength(1);
+    expect(answers[0]).toMatchObject({ confirmed: true });
+    expect(answers[0]?.type === 'switched-off' && answers[0].detail).toContain('20 of 20 identities checked get stable');
+    expect(r.state.switchOffConfirmed).toBe(true);
+    expect(formatRelative((r.state.switchedOffAtMs as number) - r.header.startedAtMs)).toBe('+09:02');
+    expect(actedAt(r)).toEqual({ plain: undefined, arm: undefined, count: '+09:02' });
+    expect(r.state.plainRuleTrippedAtMs).toBeUndefined();
+    expect(r.state.armRuleTrippedAtMs).toBeUndefined();
+    expect(formatRelative((r.state.recoveredAtMs as number) - r.header.startedAtMs)).toBe('+10:03');
+    expect(r.state.label).toBe('probably the feature');
+    expect(formatRelative((r.events.find((e) => e.type === 'labelled')?.atMs as number) - r.header.startedAtMs)).toBe('+14:03');
+    expect(r.record?.label).toBe('probably the feature');
+    expectNoNotices(r);
+    expectNoCauseWording(r);
+  });
 });
