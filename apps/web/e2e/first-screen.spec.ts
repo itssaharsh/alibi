@@ -235,3 +235,48 @@ test('five runs fit the "Try these" row without sideways scroll on a phone', asy
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });
+
+test('the scoreboard shows the numbers the summary file produces, below the first screen', async ({ page, request }) => {
+  const score = (await (await request.get('./scoreboard.json')).json()) as { headline: string; rows: { what: string; decision: string }[]; lines: string[] };
+  await page.goto('./');
+  const board = page.getByRole('region', { name: 'How the simpler rules did on the planned runs' });
+  await expect(board).toBeAttached();
+  await expect(board.getByRole('heading')).toHaveText(score.headline);
+  await expect(board.locator('tbody tr')).toHaveCount(score.rows.length);
+  for (const line of score.lines) await expect(board).toContainText(line);
+  // not on the first screen: the page answers the question first
+  await expect(board).not.toBeInViewport();
+});
+
+test('a run added later (service-outage, rare-bug) opens from the picker and its notice or label is shown', async ({ page, request }) => {
+  const index = (await (await request.get('./runs/index.json')).json()) as { runs: { name: string; title: string }[] };
+  const names = index.runs.map((r) => r.name);
+  test.skip(!names.includes('service-outage') && !names.includes('rare-bug'), 'these recorded runs are not in runs/ yet');
+  expect(names.slice(0, 3)).toEqual(['outage', 'coupon-bug', 'slow-host']);
+  if (names.includes('service-outage')) {
+    await page.goto('./?run=service-outage');
+    await expect(page.getByRole('region', { name: 'Why this verdict' })).toContainText('Notice:');
+    await expect(page.locator('.lane-notice')).toBeVisible();
+    await expect(page.getByRole('button', { name: /The notice/ }).first()).toBeVisible();
+  }
+  if (names.includes('rare-bug')) {
+    await page.goto('./?run=rare-bug');
+    await expect(page.locator('.stamp')).toContainText(/probably/);
+    await expect(page.getByRole('button', { name: /The label/ }).first()).toBeVisible();
+  }
+});
+
+test('a long run plays faster by default, and loading shows progress without fetching anything at first', async ({ page, request }) => {
+  const index = (await (await request.get('./runs/index.json')).json()) as { runs: { name: string }[] };
+  test.skip(!index.runs.some((r) => r.name === 'rare-bug'), 'the rare-bug run is not in runs/');
+  const fetched: string[] = [];
+  page.on('request', (r) => fetched.push(r.url()));
+  await page.goto('./');
+  await expect(page.locator('.stamp')).toBeVisible();
+  await page.waitForTimeout(1500);
+  expect(fetched.filter((u) => u.endsWith('rare-bug.jsonl')), 'the first screen must not fetch the long run').toEqual([]);
+  await page.getByRole('button', { name: 'The rare bug' }).click();
+  await expect(page.getByRole('radio', { name: '30×' })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('button', { name: /^Replay the rare bug/ }).click();
+  await expect(page.getByRole('button', { name: /Pause replay|Loading the run/ }).first()).toBeVisible();
+});

@@ -46,7 +46,10 @@ export function simplerRules(board: Board, finished: boolean): { rules: SimplerR
       const entry = board.timeline.find((e) => e.text.startsWith(PREFIX[key]));
       return { key, tripped: true, at: rel(board, abs), text: entry?.text ?? `${PREFIX[key]} would have switched the flag off here.` };
     }
-    return { key, tripped: false, text: finished ? `${PREFIX[key]} would not have switched the flag off.` : `${PREFIX[key]} watching the same requests.` };
+    if (finished) return { key, tripped: false, text: `${PREFIX[key]} would not have switched the flag off.` };
+    // After Alibi's switch-off nobody gets the feature, so a rule that has not acted by then has nothing left to act on.
+    if (state.switchedOffAtMs !== undefined) return { key, tripped: false, text: `${PREFIX[key]} had not acted when Alibi switched the flag off.` };
+    return { key, tripped: false, text: `${PREFIX[key]} watching the same requests.` };
   };
   const rules = [line('plain', state.plainRuleTrippedAtMs), line('arm', state.armRuleTrippedAtMs)];
   let sooner: string | undefined;
@@ -97,7 +100,7 @@ export function armMarginLine(config: GuardConfig): string {
 export type WhyTarget = { kind: 'tab'; tab: 'counted' | 'excluded' } | { kind: 'compare' } | { kind: 'watch' } | { kind: 'rule' };
 
 export interface WhyLine {
-  n: 1 | 2 | 3 | 4;
+  n: 1 | 2 | 3 | 4 | 5;
   /** The part to set in bold: a number or a short phrase at the start of the line. */
   lead: string;
   text: string;
@@ -113,9 +116,10 @@ export function topExcludedReason(board: Board): string | undefined {
   for (const t of rest) {
     const o = t.origins[0];
     if (!o) continue;
+    const name = o.label ?? o.name;
     // The engine's short reason can begin with span attributes (`db.system.name=postgresql`); the readable part follows them.
     const detail = o.detail.replace(/^(?:\S+=\S+\s+)+/, '');
-    const key = detail ? `${o.name}, ${detail}` : o.name;
+    const key = detail ? `${name}, ${detail}` : name;
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]?.[0];
@@ -151,11 +155,12 @@ export function whyVerdict(board: Board, finished: boolean): WhyLine[] {
   const top = rows[0];
   if (top) {
     const s = top.stable;
+    const spanName = spanLabel(board, top.route, top.span);
     const text = !top.spanExistsInStable
-      ? `The stable version does not run ${top.span}; on ${top.route} it failed ${s.failures} of ${s.requests} requests`
+      ? `The stable version does not run ${spanName}; on ${top.route} it failed ${s.failures} of ${s.requests} requests`
       : s.failures > 0
-        ? `The stable version failed at ${top.span} too: ${s.failures} of its requests`
-        : `The stable version did not fail at ${top.span}: 0 of ${s.requests} requests`;
+        ? `The stable version failed at ${spanName} too: ${s.failures} of its requests`
+        : `The stable version did not fail at ${spanName}: 0 of ${s.requests} requests`;
     const lead = !top.spanExistsInStable ? 'The stable version does not run' : s.failures > 0 ? 'The stable version failed' : 'The stable version did not fail';
     lines.push({ n: 3, lead, text: text.slice(lead.length), target: { kind: 'compare' } });
   } else {
@@ -178,5 +183,18 @@ export function whyVerdict(board: Board, finished: boolean): WhyLine[] {
       : { n: 4, lead: 'Not needed yet', text: ': the flag has not been switched off', target: { kind: 'rule' } };
   }
   lines.push(four);
+  // A notice is the engine's own sentence for something a person should look at; it is never a count.
+  const notice = state.notices?.[0];
+  if (notice) lines.push({ n: 5, lead: 'Notice', text: `: ${notice.text}`, target: { kind: 'tab', tab: 'excluded' } });
   return lines;
+}
+
+/** The name to print for a failing point: the engine's label (for example `GET rules:3000`) when it has one. */
+export function spanLabel(board: Board, route: string, span: string): string {
+  for (const t of [...board.tags, ...board.stableTags]) {
+    if (t.route !== route) continue;
+    const o = t.origins.find((x) => x.name === span && x.label);
+    if (o?.label) return o.label;
+  }
+  return span;
 }

@@ -82,7 +82,7 @@ export function Board({ board, ctl, selected, onPick, calm, record, skeleton }: 
         ? 'switch-off not confirmed, retrying in Flagsmith'
         : 'is being switched off in Flagsmith'
       : 'is on in Flagsmith';
-  const runState = ctl.mode === 'playing' ? 'Playing' : ctl.mode === 'loading' ? 'Loading the run' : finished ? 'Finished' : 'Paused';
+  const runState = ctl.mode === 'playing' ? 'Playing' : ctl.mode === 'loading' ? (ctl.progress ? `Loading the run, ${(ctl.progress.loaded / 1e6).toFixed(1)}${ctl.progress.total ? ` of ${(ctl.progress.total / 1e6).toFixed(1)}` : ''} MB` : 'Loading the run') : finished ? 'Finished' : 'Paused';
 
   return (
     <div className={`board${calm ? ' calm' : ''}`} ref={warmRef}>
@@ -147,6 +147,11 @@ export function Board({ board, ctl, selected, onPick, calm, record, skeleton }: 
             {rest.length === 0 && !skeleton && !board.liveHistory ? <span className="muted small">No failures outside the flagged code.</span> : null}
           </div>
           {board.liveHistory && rest.length === 0 && !skeleton ? <RateStrip history={board.liveHistory} /> : null}
+          {state.notices?.map((n) => (
+            <p key={`${n.span}|${n.kind ?? ''}|${n.atMs}`} className="lane-notice">
+              <b>Notice</b> {n.text}
+            </p>
+          ))}
         </div>
       </div>
       <div className="mini">

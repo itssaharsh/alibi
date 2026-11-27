@@ -9,12 +9,15 @@ export class ReplayClient {
   private waiting = new Map<number, (value: WorkerOut) => void>();
   private loadWaiter?: { resolve: (v: { meta: RunMeta; endMs: number }) => void; reject: (e: Error) => void };
   /** Timings of the last load, for measuring on a slow machine. */
+  /** Called while the run file arrives, with the bytes so far. */
+  onProgress?: (loaded: number, total: number) => void;
   static timings: { fetchMs: number; parseMs: number } | undefined;
 
   constructor() {
     this.worker.onmessage = (event: MessageEvent<WorkerOut>) => {
       const msg = event.data;
-      if (msg.type === 'loaded') {
+      if (msg.type === 'progress') this.onProgress?.(msg.loaded, msg.total);
+      else if (msg.type === 'loaded') {
         ReplayClient.timings = { fetchMs: msg.fetchMs, parseMs: msg.parseMs };
         (window as unknown as { __alibiTimings?: unknown }).__alibiTimings = ReplayClient.timings;
         this.loadWaiter?.resolve({ meta: msg.meta, endMs: msg.endMs });
@@ -28,10 +31,10 @@ export class ReplayClient {
     this.worker.postMessage(message);
   }
 
-  load(name: string, url: string, dropAnswers = false): Promise<{ meta: RunMeta; endMs: number }> {
+  load(name: string, url: string, dropAnswers = false, size?: number): Promise<{ meta: RunMeta; endMs: number }> {
     return new Promise((resolve, reject) => {
       this.loadWaiter = { resolve, reject };
-      this.send({ type: 'load', name, url, dropAnswers });
+      this.send({ type: 'load', name, url, dropAnswers, ...(size ? { size } : {}) });
     });
   }
 

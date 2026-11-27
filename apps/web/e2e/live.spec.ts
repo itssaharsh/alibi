@@ -175,7 +175,9 @@ test('a notice about a dependency only the flagged path calls is shown on the li
   const port = (server.address() as { port: number }).port;
   try {
     await page.goto(`./?live=http://127.0.0.1:${port}`);
-    await expect(page.getByText(`Notice: ${notice.text}`)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(`Notice: ${notice.text}`).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Why this verdict' })).toContainText(`Notice: ${notice.text}`, { useInnerText: true });
+    await expect(page.locator('.lane-notice')).toContainText(notice.text);
   } finally {
     server.close();
   }
@@ -207,10 +209,37 @@ test('plain-flag mode: the numbers card shows the guard\'s note, and nothing say
   try {
     await page.goto(`./?live=http://127.0.0.1:${port}`);
     await expect(page.getByText(note).first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Notice: First notice text.')).toBeVisible();
-    await expect(page.getByText('Notice: Second notice text, same span.')).toBeVisible();
+    await expect(page.getByText('Notice: First notice text.').first()).toBeVisible();
+    await expect(page.getByText('Notice: Second notice text, same span.').first()).toBeVisible();
     await expect(page.getByText('checkout_v2 disabled in Flagsmith; 20 of 20 identities checked get stable')).toBeVisible();
     expect((await page.locator('body').innerText()).toLowerCase()).not.toContain('rollout');
+  } finally {
+    server.close();
+  }
+});
+
+test('live: line 3 of "Why this verdict" comes from the guard\'s own baseline', async ({ page }) => {
+  const config = { flag: 'checkout_v2', stableVariation: 'stable', threshold: 15, watchMs: 300000, tolerance: { windowMs: 60000, minRequests: 20, errorRatePoints: 2, p95Factor: 1.25 }, plainRule: { windowMs: 30000, minRequests: 20, errorRate: 0.2 } };
+  const rates = { requests: 10, failures: 0, errorRate: 0, p95Ms: 30 };
+  const run = { name: 'live-run', title: 'Live traffic', planted: 'x', startedAtMs: 1_000_000, source: 'stand-in', recording: true };
+  const baseline = [{ route: '/checkout', span: 'GET', flagOn: { requests: 100, failures: 20, p95Ms: 5 }, stable: { requests: 90, failures: 7, p95Ms: 5 }, spanExistsInStable: true, why: 'connect ECONNREFUSED' }];
+  const state = { config, phase: 'armed', counted: 0, notCounted: { dependency: 20, server: 0, mixed: 0 }, totals: { flagOn: { ...rates, failures: 20 }, stable: rates }, switchOffConfirmed: false, lastSpanAtMs: 1_005_000 };
+  const payload = { state, baseline, flagsmith: { switchOff: { requested: false, confirmed: false, detail: '' } }, timeline: [], records: [], run, receiver: {} };
+  const server = createServer((req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (req.url === '/api/state') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ...payload, recent: [] }));
+    } else if (req.url === '/api/events') {
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'Access-Control-Allow-Origin': '*' });
+      res.write(`event: state\ndata: ${JSON.stringify(payload)}\n\n`);
+    } else res.writeHead(404).end();
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const port = (server.address() as { port: number }).port;
+  try {
+    await page.goto(`./?live=http://127.0.0.1:${port}`);
+    await expect(page.getByRole('region', { name: 'Why this verdict' })).toContainText('The stable version failed at GET too: 7 of its requests', { useInnerText: true, timeout: 15_000 });
   } finally {
     server.close();
   }

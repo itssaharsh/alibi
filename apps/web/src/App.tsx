@@ -8,11 +8,15 @@ import { REPO_URL } from './lib/copy';
 import { Board } from './components/Board';
 import { WordsUsed } from './components/Gloss';
 import { Demo, DemoLink } from './components/Demo';
-import { loadFigures, loadVideo, type Figures, type Video } from './lib/video';
-import { AuthorRule, Comparison, Footer, FailingAndTrace, FlagsmithNumbers, PlugIn, Record, VerdictCard, WatchBand, WhyVerdict, type FailTab } from './components/Sections';
+import { loadFigures, loadScoreboard, loadVideo, type Figures, type Video } from './lib/video';
+import type { Scoreboard } from './lib/scoreboard';
+import { AuthorRule, Comparison, ScoreboardSection, Footer, FailingAndTrace, FlagsmithNumbers, PlugIn, Record, VerdictCard, WatchBand, WhyVerdict, type FailTab } from './components/Sections';
 
 const isLiveSource = (source: string): boolean => source === 'live';
 const JAEGER_URL: string | undefined = (import.meta.env.VITE_JAEGER_URL as string | undefined) || undefined;
+
+const mb = (n: number): string => (n / 1e6).toFixed(1);
+const loadingText = (p: { loaded: number; total: number }): string => (p.total > 0 ? `Loading the run, ${mb(p.loaded)} of ${mb(p.total)} MB` : `Loading the run, ${mb(p.loaded)} MB`);
 
 function scrollToId(id: string): void {
   const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -32,9 +36,11 @@ export function App() {
   const { board, index, mode } = ctl;
   const [video, setVideo] = useState<Video>();
   const [figures, setFigures] = useState<Figures>();
+  const [score, setScore] = useState<Scoreboard>();
   useEffect(() => {
     if (!params.record) void loadVideo().then(setVideo);
     void loadFigures().then(setFigures);
+    void loadScoreboard().then(setScore);
   }, [params.record]);
   // The open request is derived from the board in front of the person, never stored across sources: a pick made by
   // hand wins; otherwise the first counted failure, or the newest failure while none counted; a recorded run's
@@ -172,7 +178,8 @@ export function App() {
               {board ? <WhyVerdict board={board} finished={board.nowMs >= board.endMs - 1 && ctl.mode !== 'playing'} onGo={go} hrefFor={whyHref} /> : null}
               {isLive ? null : (
               <button type="button" className="btn" aria-disabled={mode === 'loading'} onClick={() => (playing ? ctl.pause() : ctl.play())}>
-                <span aria-hidden="true">{playing ? '❚❚' : '▶'}</span> {playing ? 'Pause replay' : `Replay ${lowerFirst(title)}`}
+                <span aria-hidden="true">{playing ? '❚❚' : '▶'}</span>{' '}
+                {ctl.progress ? loadingText(ctl.progress) : playing ? 'Pause replay' : `Replay ${lowerFirst(title)}`}
               </button>
               )}
               {!params.record && !isLive && index ? (
@@ -222,6 +229,11 @@ export function App() {
               <div id="focus-compare">
                 <Comparison board={board} onPick={pick} links={links} />
               </div>
+              {score && !params.record ? (
+                <div id="focus-score">
+                  <ScoreboardSection score={score} />
+                </div>
+              ) : null}
               <div id="focus-record">
                 <Record board={board} figures={figures} />
               </div>

@@ -16,6 +16,8 @@ export interface Controller {
   moments: Moment[];
   featured?: RunSummary['featured'];
   speed: number;
+  /** While a run file arrives: bytes so far and in all. */
+  progress?: { loaded: number; total: number };
   source: 'replay' | 'live' | 'live-down';
   selectRun(name: string): void;
   play(): void;
@@ -36,6 +38,10 @@ export function useBoard(params: Params): Controller {
   const [summary, setSummary] = useState<RunSummary>();
   const [speed, setSpeedState] = useState(params.speed ?? DEFAULT_SPEED);
   const [source, setSource] = useState<Controller['source']>('replay');
+  const [progress, setProgress] = useState<{ loaded: number; total: number }>();
+  const speedTouched = useRef(false);
+  const sizeOf = useRef(0);
+  const indexRef = useRef<RunIndex | undefined>(undefined);
 
   const client = useRef<ReplayClient | undefined>(undefined);
   const loaded = useRef<Promise<void> | undefined>(undefined);
@@ -101,10 +107,12 @@ export function useBoard(params: Params): Controller {
       if (loaded.current && loadedKey.current === key) return loaded.current;
       client.current?.close();
       client.current = new ReplayClient();
+      client.current.onProgress = (l, t) => setProgress({ loaded: l, total: t });
       loadedKey.current = key;
       needsReset.current = true;
-      loaded.current = client.current.load(name, runFileUrl(name), drop).then(({ endMs: end }) => {
+      loaded.current = client.current.load(name, runFileUrl(name), drop, sizeOf.current).then(({ endMs: end }) => {
         endMs.current = end;
+        setProgress(undefined);
       });
       return loaded.current;
     },
@@ -145,7 +153,14 @@ export function useBoard(params: Params): Controller {
       loadedKey.current = '';
       needsReset.current = true;
       endMs.current = s.snapshot.endMs;
+      sizeOf.current = indexRef.current?.runs.find((r) => r.name === name)?.size ?? 0;
       clock.current = 0;
+      // A long run plays faster by default, so watching it takes about half a minute, not a quarter of an hour.
+      if (!params.speed && !speedTouched.current) {
+        const auto = s.snapshot.endMs > 500_000 ? 30 : DEFAULT_SPEED;
+        speedRef.current = auto;
+        setSpeedState(auto);
+      }
       if (!liveOn.current) {
         show(boardFrom(s.meta, s.snapshot));
         setMode('finished');
@@ -205,6 +220,7 @@ export function useBoard(params: Params): Controller {
       try {
         const idx = await loadIndex();
         if (cancelled) return;
+        indexRef.current = idx;
         setIndex(idx);
         const forced = params.state;
         let name = findRun(idx, params.run);
@@ -272,6 +288,7 @@ export function useBoard(params: Params): Controller {
     moments,
     ...(summary?.featured ? { featured: summary.featured } : {}),
     speed,
+    ...(progress ? { progress } : {}),
     source,
     selectRun: (name) => {
       void openRun(name).then(() => {
@@ -290,6 +307,7 @@ export function useBoard(params: Params): Controller {
       history.replaceState(null, '', url);
     },
     setSpeed: (n) => {
+      speedTouched.current = true;
       speedRef.current = n;
       setSpeedState(n);
     },

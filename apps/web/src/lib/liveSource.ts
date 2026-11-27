@@ -1,4 +1,4 @@
-import type { FlagsmithExperimentSummary, FlatSpan, GuardEvent, GuardState, InvestigationRecord, Rates, TraceVerdict } from '@alibi/core';
+import type { BaselineRow, FlagsmithExperimentSummary, FlatSpan, GuardEvent, GuardState, InvestigationRecord, Rates, TraceVerdict } from '@alibi/core';
 import { anyTagOf, momentOf, tagOf, type Board, type Moment, type Tag, type TimelineLine } from './viewModel';
 
 /**
@@ -22,6 +22,8 @@ interface Payload {
   state: GuardState;
   flagsmith?: { mode?: string; note?: string; switchOff?: { requested: boolean; confirmed: boolean; detail: string }; results?: FlagsmithExperimentSummary };
   recent?: TraceVerdict[];
+  /** The engine's baseline rows, as the record's. */
+  baseline?: BaselineRow[];
   timeline?: { atMs: number; text: string; failure?: boolean }[];
   records?: { id: string; label: string; openedAtMs: number }[];
   run: { name: string; title: string; planted: string; startedAtMs: number; source: string };
@@ -77,8 +79,7 @@ export function connectLive(url: string, onBoard: (board: Board) => void, onDown
       state,
       tags,
       stableTags,
-      // The guard does not send the baseline; the record carries it after a switch-off.
-      baseline: [],
+      baseline: payload.baseline ?? [],
       moments,
       timeline,
       ...(record ? { record } : {}),

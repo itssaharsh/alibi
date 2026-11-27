@@ -146,6 +146,16 @@ describe.skipIf(!existsSync(realOutage))('against the recorded outage run', () =
     expect(two.alibi).toMatch(/^Alibi counted 0 of 97, so the flag stays on\./);
     expect(two.sooner).toBeUndefined();
   });
+
+  it('says a simpler rule had not acted when Alibi has switched off and the run is still playing', () => {
+    const state = { ...board.state, plainRuleTrippedAtMs: undefined, armRuleTrippedAtMs: undefined, switchedOffAtMs: 1 };
+    const two = simplerRules({ ...board, state } as typeof board, false);
+    expect(two.rules.map((x) => x.text)).toEqual([
+      'Plain error-rate rule: had not acted when Alibi switched the flag off.',
+      'Arm comparison (flag on against stable): had not acted when Alibi switched the flag off.',
+    ]);
+    expect(simplerRules({ ...board, state: { ...state, switchedOffAtMs: undefined } } as typeof board, false).rules[0]!.text).toBe('Plain error-rate rule: watching the same requests.');
+  });
 });
 
 describe.skipIf(!existsSync(realOutage) || !existsSync(realRun))('"Why this verdict" on the recorded runs', () => {
@@ -191,5 +201,19 @@ describe.skipIf(!existsSync(realOutage) || !existsSync(realRun))('"Why this verd
     expect(board.baseline.length).toBeGreaterThan(0);
     expect(whyVerdict(board, false)[2]!.lead).toBe('The stable version failed');
     expect(whyVerdict(board, false)[3]!.lead).toBe('Not needed yet');
+  });
+});
+
+describe.skipIf(!existsSync(realOutage))('a notice reaches "Why this verdict" from the engine\'s own sentence', () => {
+  it('adds a fifth line, whatever the notice kind', () => {
+    const l = parseRun(readFileSync(realOutage, 'utf8'));
+    const rp = createReplayer(l);
+    const ev = rp.step(Infinity);
+    const board = boardFrom(metaOf(rp.header), snapshotOf(rp, ev, true, rp.endsAtMs - rp.header.startedAtMs));
+    const withNotice = { ...board, state: { ...board.state, notices: [{ atMs: 1, span: 'GET', kind: 'dependency-uneven' as const, failures: 9, text: 'A dependency failing far more with the flag on. A person should look.' }] } };
+    const lines = whyVerdict(withNotice, true);
+    expect(lines).toHaveLength(5);
+    expect(`${lines[4]!.lead}${lines[4]!.text}`).toBe('Notice: A dependency failing far more with the flag on. A person should look.');
+    expect(whyVerdict(board, true)).toHaveLength(4);
   });
 });

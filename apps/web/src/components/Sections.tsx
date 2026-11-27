@@ -5,7 +5,8 @@ import type { Board as BoardData, Tag } from '../lib/viewModel';
 import { outcomeOf, percent } from '../lib/viewModel';
 import type { Controller } from '../lib/useBoard';
 import { AUTHORS_RULE, COLLECTOR_CONFIG, REPO_URL, SPAN_ATTRIBUTES } from '../lib/copy';
-import { classWords, ms, pct, ratesLine, rel, relMs, sig, simplerRules, simplerRulesShort, whyVerdict, type WhyTarget } from '../lib/format';
+import { classWords, ms, pct, ratesLine, rel, relMs, sig, simplerRules, simplerRulesShort, spanLabel, whyVerdict, type WhyTarget } from '../lib/format';
+import type { Scoreboard } from '../lib/scoreboard';
 import { videoUrl, type Figures } from '../lib/video';
 import { Gloss } from './Gloss';
 import { armMarginLine } from '../lib/format';
@@ -328,7 +329,7 @@ export function Comparison({ board, onPick, links }: { board: BoardData; onPick:
               return (
                 <tr key={`${b.route}${b.span}`}>
                   <td className="mono left">
-                    {b.route}, {b.span}
+                    {b.route}, {spanLabel(board, b.route, b.span)}
                     {b.spanExistsInStable ? '' : ' (not in stable, compared at the route)'}
                   </td>
                   <td>{b.flagOn.requests}</td>
@@ -443,7 +444,7 @@ export function WhyVerdict({ board, finished, onGo, hrefFor }: { board: BoardDat
               }}
             >
               <span className="wn" aria-hidden="true">
-                {l.n}
+                {l.n === 5 ? '!' : l.n}
               </span>
               <span className="wt">
                 <b>{l.lead}</b>
@@ -498,18 +499,18 @@ export function Record({ board, figures }: { board: BoardData; figures?: Figures
         </div>
         <div>
           <FlagsmithNumbers board={board} />
-          {figures?.rollout || figures?.results ? (
+          {(figures?.rollout || figures?.results) && (!figures.run || figures.run === board.meta.name) ? (
             <div className="figures">
               {figures.rollout ? (
                 <figure>
                   <img src={videoUrl(figures.rollout)} loading="lazy" alt="Flagsmith's experiment page after the switch-off, showing Current rollout 0%" />
-                  <figcaption>Flagsmith's own experiment page after the switch-off: Current rollout 0%</figcaption>
+                  <figcaption>Flagsmith's own experiment page after the switch-off: Current rollout 0%{figures.run ? ' (a repeat of this run)' : ''}</figcaption>
                 </figure>
               ) : null}
               {figures.results ? (
                 <figure>
                   <img src={videoUrl(figures.results)} loading="lazy" alt="Flagsmith's results table for the same experiment" />
-                  <figcaption>Flagsmith's results table for the same experiment</figcaption>
+                  <figcaption>Flagsmith's results table for the same experiment{figures.run ? ' (a repeat of this run)' : ''}</figcaption>
                 </figure>
               ) : null}
             </div>
@@ -604,3 +605,60 @@ export function Footer({ sources }: { sources: string[] }) {
 }
 
 export type { FlatSpan };
+
+/** The 24 planned outage runs: what was done, the right decision, and how each rule did. Computed from the summary file at build time. */
+export function ScoreboardSection({ score }: { score: Scoreboard }) {
+  const repo = REPO_URL;
+  const cell = (c: { right: number; total: number }, label: string) => {
+    const wrong = c.right < c.total;
+    return (
+      <td className={`score-cell${wrong ? ' wrong' : ''}`} data-label={label}>
+        {wrong ? <span aria-label="not always right">✕ </span> : null}
+        {c.right} of {c.total}
+      </td>
+    );
+  };
+  return (
+    <section className="card score" aria-label="How the simpler rules did on the planned runs">
+      <h2>{score.headline}</h2>
+      <p className="muted small">
+        Both rules were scored on the same recorded requests, against what was done to the stack.
+        {repo ? (
+          <>
+            {' '}
+            <a href={`${repo}/blob/main/runs/outage-scenarios/PLAN.md`}>The plan, committed first</a>, and <a href={`${repo}/blob/main/runs/outage-scenarios/RESULTS.md`}>every run</a>.
+          </>
+        ) : null}
+      </p>
+      <div className="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th className="left">What was done</th>
+              <th className="left">Right decision</th>
+              <th>Alibi right</th>
+              <th>20-point rule right</th>
+            </tr>
+          </thead>
+          <tbody>
+            {score.rows.map((r) => (
+              <tr key={r.scenario}>
+                <td className="left what">{r.what}</td>
+                <td className="left" data-label="Right decision">
+                  {r.decision}
+                </td>
+                {cell(r.alibi, 'Alibi right')}
+                {cell(r.rule, '20-point rule right')}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <ul className="score-lines">
+        {score.lines.map((l) => (
+          <li key={l}>{l}</li>
+        ))}
+      </ul>
+    </section>
+  );
+}

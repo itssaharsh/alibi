@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FLAGGED_PATH_ATTRIBUTE, type FlatSpan, type OriginSpan } from '@alibi/core';
+import { dependencyTarget, FLAGGED_PATH_ATTRIBUTE, type FlatSpan, type OriginSpan } from '@alibi/core';
 import { waterfallOf } from '../lib/viewModel';
 import { classWords, ms } from '../lib/format';
 
@@ -31,7 +31,7 @@ export function Waterfall({ spans, origins, loading, compact }: Props) {
             <div key={span.spanId} role="row" className={`wf-row${origin ? ' origin' : ''}${flagged ? ' flagged' : ''}`}>
               <span role="cell" className="wf-name" style={{ paddingLeft: Math.min(depth, 6) * 12 }}>
                 {origin ? <span className="x" aria-label="failing span">✕</span> : null}
-                <span className="wf-t">{span.name}</span>
+                <span className="wf-t">{origin?.label ?? (span.kind === 'client' ? dependencyTarget(span)?.label : undefined) ?? span.name}</span>
                 {origin ? <em className="chip">{classWords[origin.class]}</em> : null}
               </span>
               <span role="cell" className="wf-track">

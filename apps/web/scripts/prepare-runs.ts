@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createReplayer, parseRun } from '../../../packages/core/src/index.js';
 import { metaOf, recordedResults, snapshotOf } from '../src/lib/snapshots';
 import type { RunSummary } from '../src/lib/runs';
+import { buildScoreboard, type ScenarioSummary } from '../src/lib/scoreboard';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const web = join(here, '..');
@@ -30,7 +31,8 @@ const sources = new Map<string, string>(found.map((n) => [n, join(recorded, `${n
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
-const order = NAMES;
+// The three runs the page opens on are required; the others (service-outage, rare-bug, and any later run) are shown after them when their files are in runs/.
+const order = [...NAMES, 'service-outage', 'rare-bug'];
 const files = [...sources.keys()].sort((a, b) => {
   const ia = order.indexOf(a);
   const ib = order.indexOf(b);
@@ -80,6 +82,14 @@ for (const name of files) {
 
 writeFileSync(join(out, 'index.json'), JSON.stringify({ runs, default: runs.find((r) => r.name === 'outage')?.name ?? runs[0]?.name ?? '' }));
 writeFileSync(join(web, 'public', 'probe.json'), JSON.stringify(probe ?? { decision: 'no run' }));
+// The scoreboard of the pre-registered scenario runs, worked out from their summary. The build fails without it.
+const scenarioSummary = join(web, '..', '..', 'runs', 'outage-scenarios', 'summary.json');
+if (!existsSync(scenarioSummary)) {
+  console.error('runs/outage-scenarios/summary.json is missing. The page shows the scoreboard computed from it.');
+  process.exit(1);
+}
+writeFileSync(join(web, 'public', 'scoreboard.json'), JSON.stringify(buildScoreboard(JSON.parse(readFileSync(scenarioSummary, 'utf8')) as ScenarioSummary)));
+
 // The demo video is optional: when public/alibi-demo.mp4 exists the page shows a link and a player, otherwise neither.
 const publicDir = join(web, 'public');
 const videoFile = join(publicDir, 'alibi-demo.mp4');
@@ -107,7 +117,7 @@ const stills = [
   ['results.png', 'flagsmith-results.png'],
 ].filter(([, f]) => existsSync(join(publicDir, f as string)));
 const figuresJson = join(publicDir, 'figures.json');
-if (stills.length > 0) writeFileSync(figuresJson, JSON.stringify({ rollout: stills.some(([k]) => k === 'rollout.png') ? 'flagsmith-rollout.png' : undefined, results: stills.some(([k]) => k === 'results.png') ? 'flagsmith-results.png' : undefined }));
+if (stills.length > 0) writeFileSync(figuresJson, JSON.stringify({ run: 'coupon-bug', rollout: stills.some(([k]) => k === 'rollout.png') ? 'flagsmith-rollout.png' : undefined, results: stills.some(([k]) => k === 'results.png') ? 'flagsmith-results.png' : undefined }));
 else rmSync(figuresJson, { force: true });
 
 console.log(`prepared ${runs.length} runs: ${runs.map((r) => `${r.name} (${(r.size / 1e6).toFixed(1)} MB)`).join(', ')}`);

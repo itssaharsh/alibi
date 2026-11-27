@@ -181,3 +181,22 @@ a.f-row{text-decoration:none;color:inherit}
 .rec .why{margin-top:10px}.rec .why a{padding:5px 4px}
 @media(max-width:900px){h1{font-size:40px}.verdict{margin-top:34px;padding:14px 16px}.sub{margin-top:12px;font-size:17px}.for-line{font-size:14px}.why{margin-top:12px;padding:10px 12px 6px}.why a{padding:5px 2px}.btn{margin-top:14px}}
 .page{overflow-x:clip}
+
+.w5 .wn{background:var(--warning);color:#fff}
+.lane-notice{margin:14px 0 0;padding:10px 12px;border-radius:10px;background:var(--surface-1);border:1px solid var(--line);border-left:4px solid var(--warning);font-size:13.5px;line-height:1.4}.lane-notice b{color:var(--warning)}
+.score h2{font-size:21px;line-height:1.25;text-wrap:balance}.score table{margin-top:8px}
+.score-cell{white-space:nowrap;font-variant-numeric:tabular-nums}.score-cell.wrong{color:var(--danger);font-weight:700}
+.score-lines{margin:14px 0 0;padding-left:1.2em;font-size:15px;line-height:1.5}.score-lines li{margin:4px 0}
+.tick.notice{border-color:var(--warning)}.tick.notice.reached{background:var(--warning)}
+
+@media(max-width:700px){
+  .score table,.score tbody{display:block;width:100%}
+  .score thead{display:none}
+  .score tr{display:grid;grid-template-columns:1fr;gap:2px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .score td{border:0;padding:0;text-align:left;font-size:13.5px;white-space:normal}
+  .score td.what{grid-column:1/-1;font-weight:600;font-size:14.5px;margin-bottom:2px}
+  .score .scroll td:not(.why):not(.fs-cell){white-space:normal}
+  .score td[data-label]::before{content:attr(data-label) ": ";color:var(--ink-muted)}
+  .score td[data-label="Right decision"]{grid-column:1/-1}
+}
+.tick{z-index:1}.tick:hover,.tick:focus-visible{z-index:3;transform:scale(1.35)}

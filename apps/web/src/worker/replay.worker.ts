@@ -4,11 +4,12 @@ import { metaOf, recordedResults, snapshotOf } from '../lib/snapshots';
 import type { RunMeta, Snapshot } from '../lib/viewModel';
 
 export type WorkerIn =
-  | { type: 'load'; name: string; url: string; dropAnswers?: boolean }
+  | { type: 'load'; name: string; url: string; size?: number; dropAnswers?: boolean }
   | { type: 'seek'; seq: number; atMs: number }
   | { type: 'trace'; seq: number; id: string };
 
 export type WorkerOut =
+  | { type: 'progress'; loaded: number; total: number }
   | { type: 'loaded'; meta: RunMeta; endMs: number; fetchMs: number; parseMs: number }
   | { type: 'failed'; message: string }
   | { type: 'snapshot'; seq: number; snapshot: Snapshot }
@@ -30,7 +31,26 @@ self.onmessage = async (event: MessageEvent<WorkerIn>) => {
       const t0 = performance.now();
       const response = await fetch(msg.url);
       if (!response.ok) throw new Error(`the run file did not load (${response.status})`);
-      const text = await response.text();
+      // Read the file as it arrives so the page can show how much has come.
+      let text = '';
+      if (response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let got = 0;
+        let last = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          got += value.byteLength;
+          text += decoder.decode(value, { stream: true });
+          const now = performance.now();
+          if (now - last > 150) {
+            last = now;
+            post({ type: 'progress', loaded: got, total: msg.size ?? 0 });
+          }
+        }
+        text += decoder.decode();
+      } else text = await response.text();
       const t1 = performance.now();
       lines = parseRun(text);
       const t2 = performance.now();
