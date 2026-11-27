@@ -54,3 +54,6 @@ storage_state*.json
 /UI-SPEC.md
 /prod-ui/
 /qa/
+
+# demo video working files (the published video is served from the page)
+/video/
