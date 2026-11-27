@@ -6,7 +6,7 @@ Alibi switches a Flagsmith feature off only when the feature's own code is faili
 
 **[Live page](https://itssaharsh.github.io/alibi/)** (no sign-in; recorded runs replayed in your browser) · **[Run it yourself](#quickstart-run-it-yourself)** (three commands) · Track 03, Build on Open Source Flagsmith
 
-**In six recorded database outages, a plain error-rate kill switch would have switched the healthy feature off six times. Alibi switched it off zero times, because each failing request said where it failed: in the database, not in the feature.** Where a simpler rule does as well, this README says so: see [the numbers](#the-numbers-against-two-simpler-rules).
+**In 24 runs whose scenarios and scoring were committed before any of them ran (outages of a shared service, of a service only the feature calls, a flaky database, bugs in the feature), Alibi made the right call 24 times. A rule that compares the two versions at a 20-point margin made it 17 times.** Three of that rule's seven misses depend on what you call infrastructure, and on the 18 runs before these the two rules tie. [The numbers](#the-numbers-against-two-simpler-rules) say all of it.
 
 ## The problem
 
@@ -14,7 +14,7 @@ You put a new checkout behind a flag for half your shoppers. Twenty minutes late
 
 The trace already knows. Every failing request says where it failed: in the new checkout's own code, or in a call to something that was down.
 
-## What happened in three recorded runs
+## What happened in five recorded runs
 
 These ran on a real stack: self-hosted Flagsmith 2.295.2, a shop instrumented with OpenTelemetry, two requests a second from 600 scripted shoppers, recorded on 27 November 2026.
 
@@ -24,6 +24,9 @@ These ran on a real stack: self-hosted Flagsmith 2.295.2, a shop instrumented wi
 | **The coupon bug** | Carts with a coupon crash inside `checkout_v2.apply_coupon` | Counted each one. At the 16th it set the rollout to 0% in Flagsmith and confirmed 20 of 20 identities got the stable checkout. Errors and latency were back at the stable version's level a minute later. Label: **probably the feature** |
 | **The slow host** | The shop's CPU was throttled to a twentieth of a core | The new checkout's own time budget failed 16 times, so the flag went off. Errors stopped, but p95 latency stayed at 330 ms against a stable level of 42 ms. Label: **probably not the feature** |
 
+| **The feature's own service goes down** | A service that only the new checkout calls was stopped for 90 seconds | 97 requests with the flag on failed, all in `GET rules:3000`, a dependency call. Alibi counted 0, left the flag on, and seven seconds in raised a notice: the stable version never makes this call, so a person should look. A rule comparing the two versions at a 20-point margin would have switched the feature off at +01:43 |
+| **The rare bug** | 1 cart in 20 crashes inside `checkout_v2.apply_coupon` | Neither simpler rule ever acts: the error rate stays too low. Alibi counts each failure, reaches the 16th at +09:02, sets the rollout to 0% and confirms 20 of 20. Back at the stable level a minute later. Label: **probably the feature** |
+
 In the slow-host run the rule did what it says: the feature's own code was failing, so the flag went off. The five-minute watch is how Alibi found out the feature was probably not why.
 
 ![The coupon bug at the moment the counter passes 15](docs/img/coupon-switch.png)
@@ -31,7 +34,7 @@ In the slow-host run the rule did what it says: the feature's own code was faili
 ## For judges: see it in under a minute
 
 1. Open https://itssaharsh.github.io/alibi/. The first screen is the database outage, already finished: 0 of 97 counted, the flag stays on. Click any tag to see that request's spans and the reason.
-2. Press **Replay the database outage**, or pick **The coupon bug** and jump to "The counter passes 15".
+2. Press **Replay the database outage**, or pick **The coupon bug** and jump to "The counter passes 15". Two more runs show where a simple rule goes wrong: **The feature's own service goes down** and **The rare bug**.
 3. Or replay a run in your terminal. This needs Node 22 and nothing else:
 
 ```bash
@@ -108,7 +111,7 @@ The command prints a summary when it ends. The recording of the run is written i
 
 | What | Address |
 |---|---|
-| The live board (add `?live=` to the address to see the three recorded runs instead) | http://127.0.0.1:4173 |
+| The live board (add `?live=` to the address to see the recorded runs instead) | http://127.0.0.1:4173 |
 | Flagsmith | http://127.0.0.1:8000 |
 | Jaeger, for the traces | http://127.0.0.1:16686 |
 | Alibi's own state, as JSON | http://127.0.0.1:4319/api/state |
@@ -134,6 +137,17 @@ node load/run.mjs degraded-host   # 9 minutes: the shop's CPU is throttled (the 
 ```
 
 In the outage, the board shows failures counted as dependency failures, the counter stays at 0 and the flag stays on. In `degraded-host`, the flag goes off and the label ends as **probably not the feature**. Each scenario arms Alibi itself, so you do not have to.
+
+### The outage scenarios
+
+The planned runs under [the numbers](#the-numbers-against-two-simpler-rules) use two more services and a fault proxy. Start the example with one more file, then run a scenario:
+
+```bash
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.downstream.yml up -d --build --wait
+ALIBI_EXAMPLE_PROFILE=downstream node load/run.mjs feature-service-outage
+```
+
+The extra file adds a tax service both checkouts call, a rules service only the new checkout calls, and a proxy in front of the shop's database. It also holds Alibi in observe-only mode: it counts, records and raises notices, and never switches the flag off, so both rules see the same requests. The other scenario names are `shared-service-outage`, `shared-service-outage-low-traffic`, `database-outage-with-bug`, `shared-service-outage-with-bug`, `rare-bug` and `healthy`. `node load/scenarios-matrix.mjs` runs all of them unattended, including the flaky database, and writes the tables.
 
 ### Between runs, and stopping
 
@@ -183,7 +197,7 @@ One thing we learned from Flagsmith 2.295.2 while building this: disabling a fea
 
 ## The numbers, against two simpler rules
 
-### On the three recorded runs
+### On the first three recorded runs
 
 Alibi replays every run through two rules that need no traces, and shows what each would have done:
 
@@ -201,13 +215,45 @@ One run is an anecdote, so each scenario was run five more times, each from a fr
 
 | Scenario, 5 runs each | Alibi | Plain error-rate rule | Arm comparison, 10-point margin | Arm comparison, 20-point margin |
 |---|---|---|---|---|
-| The database outage | flag stayed on in 5 of 5: 0 counted, 82 to 99 failures with the flag on, every one a dependency failure | would have switched the healthy feature off in 5 of 5 | would have switched it off in 3 of 5 | would have held in 5 of 5 (the widest gap between the arms was 17.8 points) |
-| The coupon bug | switched off in 5 of 5, between +2:22 and +2:43; recovered and labelled "probably the feature" in 5 of 5 | 5 of 5, 33 to 47 seconds sooner than Alibi | 5 of 5, sooner than Alibi | 5 of 5 |
+| The database outage | flag stayed on in 5 of 5: 0 counted, 82 to 99 failures with the flag on, every one a dependency failure | would have switched the healthy feature off in 5 of 5 | would have switched it off in 3 of 5 | would have held in 5 of 5 (the widest gap between the arms was 18.6 points) |
+| The coupon bug | switched off in 5 of 5, between +02:21 and +02:42; recovered and labelled "probably the feature" in 5 of 5 | 5 of 5, 33 to 47 seconds sooner than Alibi | 5 of 5, sooner than Alibi | 5 of 5 |
 | The slow host | switched off in 5 of 5; never recovered; "probably not the feature" in 5 of 5 | 5 of 5, 9 to 13 seconds sooner | 5 of 5, sooner | 5 of 5 |
 
 So on these runs an arm comparison tuned to 20 points makes the same switch-off decisions as Alibi, and on the first recorded coupon run it makes it ten seconds sooner. Alibi does not decide better than that rule here. What it adds is that nobody has to guess the margin (10 points was wrong three times in five), every failing request comes with where it failed and why, and the watch afterwards says whether switching off helped.
 
 In all fifteen, replaying the recording through the engine reaches the same counts, switch-off and label as the live run did.
+
+### Twenty-four more runs, planned before any of them ran
+
+The rule exists for one case above all: requests failing because something else is down while the experiment runs. The eighteen runs above cover one shape of that, the shop's database stopped, and on them a 20-point comparison decides as well as Alibi. So eight more scenarios were written down, with what counts as right and wrong in each, in [`runs/outage-scenarios/PLAN.md`](runs/outage-scenarios/PLAN.md). That file was committed before the scenarios existed in code. Each scenario then ran three times, each from a fresh stack, with two small services added to the shop: a tax service both checkouts call, and a rules service only the new checkout calls.
+
+What was done to the stack is the truth. If only infrastructure was broken, the right decision is to leave the flag on. If the new checkout's own code was failing, the right decision is to act before the run ends. Alibi only observed in these runs, so that both rules judged the same requests; its decision is whether its count passed 15.
+
+| Scenario, 3 runs each | Right decision | Alibi | The 20-point rule |
+|---|---|---|---|
+| A service both checkouts call is stopped for 90 seconds | leave it on | right in 3 | right in 3 |
+| A service only the new checkout calls is stopped for 90 seconds | leave it on | right in 3: 84 to 98 failures with the flag on, every one a dependency failure, 0 counted | **wrong in 3**: acted at +01:43, +01:43 and +01:46, within 17 seconds of the service stopping |
+| About 35% of database connections fail for 3 minutes | leave it on | right in 3 | right in 3 (the widest gap was 18.8 points) |
+| The shared service is stopped, at 1 request a second | leave it on | right in 3 | **wrong in 1**: with 45 failures in each version the gap reached 20.1 points and it acted at +02:14 |
+| The database is stopped, and 1 cart in 5 crashes the new checkout | act | right in 3: acted between +04:25 and +04:50 | right in 3: between +03:49 and +05:08 |
+| The shared service is stopped, and 1 cart in 5 crashes the new checkout | act | right in 3: between +04:43 and +04:55 | right in 3: between +03:39 and +05:14 |
+| 1 cart in 20 crashes the new checkout, nothing else is wrong | act | right in 3: acted at +05:37, +07:48 and +08:25 | **wrong in 3**: the gap stayed at 10 points or less, so it never acted |
+| Nothing is wrong | leave it on | right in 3 | right in 3 |
+| **All 24** | | **24 right, 0 wrong** | **17 right, 7 wrong** |
+
+Read it honestly:
+
+- **Three of the simple rule's seven misses are a matter of definition.** When a service that only the feature uses is down, the author's rule calls that infrastructure, so acting is scored wrong. A team that would rather switch a feature off when its own dependency is down would score those three runs the other way: Alibi 21 of 24, the simple rule 20 of 24. In those runs Alibi left the flag on and raised a notice at +01:39, +01:38 and +01:43, sooner than the simple rule acted: "the stable version never makes this call, so a person should look". (That notice needed an engine fix these runs exposed: two services behind the same span name were taken for one. The results file shows it before and after; no count or decision changed.)
+- **Three are the rare bug.** A bug that fails 1 request in 20 never opens a 20-point gap between the versions. A count of failures in the feature's own code gets to 16 regardless, here after 4 to 7 minutes. That is the other side of the limit below: the count has no time window.
+- **One is noise.** At 1 request a second there are about 30 requests in each version per minute, and during a shared outage the gap between them reached 20.1 points by chance.
+- **Where both were right, neither was reliably sooner.** In the six runs with an outage and a bug together, Alibi acted first in four and the simple rule in two.
+- **Not scored:** the same comparison at a 10-point margin acted in 10 of the 12 infrastructure-only runs, and the plain error-rate rule in 9 of 12.
+
+The same scoring applied to the eighteen earlier runs, after the fact: both rules are right in 12 and wrong in 6. The six are the slow-host runs. The fault was the host, the new checkout's time budget failed because of it, and both rules switched the flag off. Alibi's watch then labelled all six "probably not the feature".
+
+Over all 42 runs: Alibi right in 36, the 20-point rule in 29. Every run, with its failures by class, both rules' times and the checks that each scripted fault really happened, is in [`runs/outage-scenarios/RESULTS.md`](runs/outage-scenarios/RESULTS.md). Three runs a scenario show what happened three times; they are not a study.
+
+The two extra runs on the page, the feature's own service going down and the rare bug, were recorded after these, with Alibi acting instead of observing. They are there to be looked at and are in none of the totals.
 
 ## How it works
 
@@ -226,7 +272,7 @@ flowchart LR
 - You wrap the feature's code in one span that carries `alibi.flagged_path=<flag>`.
 - The collector you already run gets one more exporter.
 - For each failing request, Alibi finds the span where the error started and classes the request: flagged path, dependency, server, or mixed. It writes one sentence from that span's own fields, for example: "Failed in pg.connect, a dependency call (db.system.name=postgresql): Connection terminated unexpectedly. The dependency was unavailable, so this does not count."
-- The engine (`packages/core`) is pure TypeScript with no dependencies. The guard service and the page run the same code, and 153 tests pin its sentences word for word, including on spans captured from the real stack and on the three recorded runs.
+- The engine (`packages/core`) is pure TypeScript with no dependencies. The guard service and the page run the same code, and 161 tests pin its sentences word for word, including on spans captured from the real stack and on the five recorded runs.
 
 The attribute names follow OpenTelemetry's feature-flag semantic conventions, which are still a release candidate, so this is not a conformance claim.
 
@@ -269,10 +315,10 @@ Alibi's settings are environment variables, listed in `packages/guard/README.md`
 Limits worth knowing before you rely on it:
 
 - **The count has no time window.** The rule says "more than 15 requests", so 16 failures spread over a day switch the flag off as surely as 16 in a minute. Re-arm Alibi when you start a rollout.
-- **A dependency that only the new code calls.** If it is down, those failures do not count, because the rule calls that infrastructure. Alibi raises a notice instead ("the stable version never makes this call, so a person should look"); it does not switch the flag off.
+- **A dependency that only the new code calls.** If it is down, those failures do not count, because the rule calls that infrastructure. Alibi raises a notice instead ("the stable version never makes this call, so a person should look"); it does not switch the flag off. Three of the planned runs are this case. If you would rather switch off there, Alibi's rule is the wrong rule for you.
 - **A feature that breaks something shared.** If the new code overloads the database for everyone, every failure is a dependency failure in both versions, and by the rule none of them count. Alibi raises a notice when a shared dependency fails far more often with the flag on than in the stable version (30 points apart, at least 20 requests each), because the rule asks for that comparison. If both versions fail alike, nothing tells it apart from an outage, and a person has to catch it.
 - **It needs a stable arm.** The level that "recovered" is tested against comes from requests that got the stable version, so a flag that is on for everyone has nothing to compare with.
-- **Eighteen runs of one scripted shop.** They are recorded and repeatable, not a study of real traffic.
+- **Forty-four runs of one scripted shop.** They are recorded and repeatable, not a study of real traffic.
 
 ## Built with
 
