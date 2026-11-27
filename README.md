@@ -1,11 +1,12 @@
 # Alibi: was it the flag, or was the database down?
 
-Alibi switches a Flagsmith feature off only when the feature's own code is failing, and tells you why it thinks so. It reads the OpenTelemetry traces your service already sends.
+Alibi switches a Flagsmith feature off only when the feature's own code is failing, and tells you why it thinks so. It reads the OpenTelemetry traces your service already sends. For teams who ship features behind Flagsmith flags.
 
 [![The database outage: 97 failures with the flag on, 0 counted, the flag stays on](docs/img/first-screen.png)](https://itssaharsh.github.io/alibi/)
 
-**Live page:** https://itssaharsh.github.io/alibi/ (no sign-in; it replays three recorded runs in your browser)
-**Track:** 03, Build on Open Source Flagsmith
+**[Live page](https://itssaharsh.github.io/alibi/)** (no sign-in; recorded runs replayed in your browser) · **[Run it yourself](#quickstart-run-it-yourself)** (three commands) · Track 03, Build on Open Source Flagsmith
+
+**In six recorded database outages, a plain error-rate kill switch would have switched the healthy feature off six times. Alibi switched it off zero times, because each failing request said where it failed: in the database, not in the feature.** Where a simpler rule does as well, this README says so: see [the numbers](#the-numbers-against-two-simpler-rules).
 
 ## The problem
 
@@ -24,32 +25,6 @@ These ran on a real stack: self-hosted Flagsmith 2.295.2, a shop instrumented wi
 | **The slow host** | The shop's CPU was throttled to a twentieth of a core | The new checkout's own time budget failed 16 times, so the flag went off. Errors stopped, but p95 latency stayed at 330 ms against a stable level of 42 ms. Label: **probably not the feature** |
 
 In the slow-host run the rule did what it says: the feature's own code was failing, so the flag went off. The five-minute watch is how Alibi found out the feature was probably not why.
-
-### Against two simpler rules, on the same requests
-
-Alibi replays every run through two rules that need no traces, and shows what each would have done:
-
-| Run | Plain error-rate rule (flag-on errors over 20% in 30 s) | Arm comparison (flag on against stable over 60 s) | Alibi |
-|---|---|---|---|
-| The database outage | switches the healthy feature off at +01:16 | at a 10-point margin, switches it off at +01:22 (39.1% against 28.8%); holds only from a 20-point margin up | 0 counted, flag stays on |
-| The coupon bug | off at +01:58 | off at +01:58 (10 points) or +02:20 (20 points) | off at +02:30, with the failing span, then "probably the feature" |
-| The slow host | off at +01:36 | off at +01:36 (10 points) or +01:44 (20 points) | off at +01:48, then "probably not the feature" |
-
-Read it honestly: on a real bug both simpler rules are faster than Alibi, which waits for 16 failures in the feature's own code. And an arm comparison with a wide enough margin gets all three decisions right. What it needs is that margin, picked in advance: during the outage both variations were failing, and with about 50 requests in each the gap between them reached 19 points on noise alone (at the moment the 10-point rule tripped, 18 of 46 against 19 of 66, the two-proportion p-value is 0.25). Alibi has no margin to pick, because it does not compare rates: each of the 97 failures says it failed in `pg.connect`. That is what reading the trace buys: the reason for every request, and a record that stops at "probably".
-
-### Repeated fifteen times
-
-One run is an anecdote, so each scenario was run five more times, each from a fresh stack. Every row of every run is in [`runs/repeats/README.md`](runs/repeats/README.md).
-
-| Scenario, 5 runs each | Alibi | Plain error-rate rule | Arm comparison, 10-point margin | Arm comparison, 20-point margin |
-|---|---|---|---|---|
-| The database outage | flag stayed on in 5 of 5: 0 counted, 82 to 99 failures with the flag on, every one a dependency failure | would have switched the healthy feature off in 5 of 5 | would have switched it off in 3 of 5 | would have held in 5 of 5 (the widest gap between the arms was 17.8 points) |
-| The coupon bug | switched off in 5 of 5, between +2:22 and +2:43; recovered and labelled "probably the feature" in 5 of 5 | 5 of 5, 33 to 47 seconds sooner than Alibi | 5 of 5, sooner than Alibi | 5 of 5 |
-| The slow host | switched off in 5 of 5; never recovered; "probably not the feature" in 5 of 5 | 5 of 5, 9 to 13 seconds sooner | 5 of 5, sooner | 5 of 5 |
-
-So on these runs an arm comparison tuned to 20 points makes the same switch-off decisions as Alibi, and on the first recorded coupon run it makes it ten seconds sooner. Alibi does not decide better than that rule here. What it adds is that nobody has to guess the margin (10 points was wrong three times in five), every failing request comes with where it failed and why, and the watch afterwards says whether switching off helped.
-
-In all fifteen, replaying the recording through the engine reaches the same counts, switch-off and label as the live run did.
 
 ![The coupon bug at the moment the counter passes 15](docs/img/coupon-switch.png)
 
@@ -95,6 +70,15 @@ Summary
 ```
 
 The output is shortened in the one place it says so. The page and the command run the same engine on the same recorded spans. Only Flagsmith's answers are replayed from the recording.
+
+## Track 03, line by line
+
+| The track asks for | Where it is |
+|---|---|
+| "Self-hosted Flagsmith" | `deploy/docker-compose.yml` starts Flagsmith 2.295.2 from the official image and a bootstrap container creates the flag, the three metrics and the experiment. Every run in this README was recorded on it |
+| "Integrations and plugins" | Alibi sits between the OpenTelemetry Collector and Flagsmith: spans in, exposures and metric events out, the rollout change back in |
+| "Developer tools" | The live board, the investigation record, the replay command, and a one-sentence reason for every failing request |
+| "Easy for others to reuse" | The quickstart below is three commands and was run from a fresh copy. `deploy/attach/` starts only Alibi and the board against a Flagsmith you already have. `packages/otel-helpers` is the two functions a Node service needs |
 
 ## Quickstart: run it yourself
 
@@ -197,14 +181,33 @@ In the coupon run, Flagsmith's engine, fed only from spans, gave the new checkou
 
 One thing we learned from Flagsmith 2.295.2 while building this: disabling a feature that is in a running experiment does not change what identities receive. The experiment's rollout is the switch, so that is what Alibi sets, and it never reports a switch-off that an evaluation did not confirm.
 
-## Track 03, line by line
+## The numbers, against two simpler rules
 
-| The track asks for | Where it is |
-|---|---|
-| "Self-hosted Flagsmith" | `deploy/docker-compose.yml` starts Flagsmith 2.295.2 from the official image and a bootstrap container creates the flag, the three metrics and the experiment. Every run in this README was recorded on it |
-| "Integrations and plugins" | Alibi sits between the OpenTelemetry Collector and Flagsmith: spans in, exposures and metric events out, the rollout change back in |
-| "Developer tools" | The live board, the investigation record, the replay command, and a one-sentence reason for every failing request |
-| "Easy for others to reuse" | The quickstart above is three commands and was run from a fresh copy. `deploy/attach/` starts only Alibi and the board against a Flagsmith you already have. `packages/otel-helpers` is the two functions a Node service needs |
+### On the three recorded runs
+
+Alibi replays every run through two rules that need no traces, and shows what each would have done:
+
+| Run | Plain error-rate rule (flag-on errors over 20% in 30 s) | Arm comparison (flag on against stable over 60 s) | Alibi |
+|---|---|---|---|
+| The database outage | switches the healthy feature off at +01:16 | at a 10-point margin, switches it off at +01:22 (39.1% against 28.8%); holds only from a 20-point margin up | 0 counted, flag stays on |
+| The coupon bug | off at +01:58 | off at +01:58 (10 points) or +02:20 (20 points) | off at +02:30, with the failing span, then "probably the feature" |
+| The slow host | off at +01:36 | off at +01:36 (10 points) or +01:44 (20 points) | off at +01:48, then "probably not the feature" |
+
+Read it honestly: on a real bug both simpler rules are faster than Alibi, which waits for 16 failures in the feature's own code. And an arm comparison with a wide enough margin gets all three decisions right. What it needs is that margin, picked in advance: during the outage both variations were failing, and with about 50 requests in each the gap between them reached 19 points on noise alone (at the moment the 10-point rule tripped, 18 of 46 against 19 of 66, the two-proportion p-value is 0.25). Alibi has no margin to pick, because it does not compare rates: each of the 97 failures says it failed in `pg.connect`. That is what reading the trace buys: the reason for every request, and a record that stops at "probably".
+
+### Repeated fifteen times
+
+One run is an anecdote, so each scenario was run five more times, each from a fresh stack. Every row of every run is in [`runs/repeats/README.md`](runs/repeats/README.md).
+
+| Scenario, 5 runs each | Alibi | Plain error-rate rule | Arm comparison, 10-point margin | Arm comparison, 20-point margin |
+|---|---|---|---|---|
+| The database outage | flag stayed on in 5 of 5: 0 counted, 82 to 99 failures with the flag on, every one a dependency failure | would have switched the healthy feature off in 5 of 5 | would have switched it off in 3 of 5 | would have held in 5 of 5 (the widest gap between the arms was 17.8 points) |
+| The coupon bug | switched off in 5 of 5, between +2:22 and +2:43; recovered and labelled "probably the feature" in 5 of 5 | 5 of 5, 33 to 47 seconds sooner than Alibi | 5 of 5, sooner than Alibi | 5 of 5 |
+| The slow host | switched off in 5 of 5; never recovered; "probably not the feature" in 5 of 5 | 5 of 5, 9 to 13 seconds sooner | 5 of 5, sooner | 5 of 5 |
+
+So on these runs an arm comparison tuned to 20 points makes the same switch-off decisions as Alibi, and on the first recorded coupon run it makes it ten seconds sooner. Alibi does not decide better than that rule here. What it adds is that nobody has to guess the margin (10 points was wrong three times in five), every failing request comes with where it failed and why, and the watch afterwards says whether switching off helped.
+
+In all fifteen, replaying the recording through the engine reaches the same counts, switch-off and label as the live run did.
 
 ## How it works
 
