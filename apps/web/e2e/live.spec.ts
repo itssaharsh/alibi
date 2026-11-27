@@ -177,3 +177,38 @@ test('a notice about a dependency only the flagged path calls is shown on the li
     server.close();
   }
 });
+
+test('plain-flag mode: the numbers card shows the guard\'s note, and nothing says "rollout" unless the guard does', async ({ page }) => {
+  const config = { flag: 'checkout_v2', stableVariation: 'stable', threshold: 15, watchMs: 300000, tolerance: { windowMs: 60000, minRequests: 20, errorRatePoints: 2, p95Factor: 1.25 }, plainRule: { windowMs: 30000, minRequests: 20, errorRate: 0.2 } };
+  const rates = { requests: 10, failures: 0, errorRate: 0, p95Ms: 30 };
+  const run = { name: 'live-run', title: 'Live traffic', planted: 'x', startedAtMs: 1_000_000, source: 'stand-in', recording: true };
+  const note = 'This flag is not in an experiment, so no experiment events are sent and no experiment numbers are read.';
+  const notices = [
+    { atMs: 1_004_000, span: 'pg.query:SELECT price', kind: 'flagged-path-only', failures: 3, text: 'First notice text.' },
+    { atMs: 1_004_500, span: 'pg.query:SELECT price', kind: 'dependency-uneven', failures: 9, text: 'Second notice text, same span.' },
+  ];
+  const state = { config, phase: 'watching', counted: 16, notCounted: { dependency: 0, server: 0, mixed: 0 }, totals: { flagOn: { ...rates, failures: 16 }, stable: rates }, stableBaseline: rates, switchOffConfirmed: true, switchedOffAtMs: 1_090_000, watchEndsAtMs: 1_390_000, lastSpanAtMs: 1_100_000, notices };
+  const payload = { state, flagsmith: { mode: 'plain-flag', note, switchOff: { requested: true, confirmed: true, detail: 'checkout_v2 disabled in Flagsmith; 20 of 20 identities checked get stable' } }, timeline: [], records: [], run, receiver: {} };
+  const server = createServer((req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (req.url === '/api/state') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ...payload, recent: [] }));
+    } else if (req.url === '/api/events') {
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'Access-Control-Allow-Origin': '*' });
+      res.write(`event: state\ndata: ${JSON.stringify(payload)}\n\n`);
+    } else res.writeHead(404).end();
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const port = (server.address() as { port: number }).port;
+  try {
+    await page.goto(`./?live=http://127.0.0.1:${port}`);
+    await expect(page.getByText(note).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Notice: First notice text.')).toBeVisible();
+    await expect(page.getByText('Notice: Second notice text, same span.')).toBeVisible();
+    await expect(page.getByText('checkout_v2 disabled in Flagsmith; 20 of 20 identities checked get stable')).toBeVisible();
+    expect((await page.locator('body').innerText()).toLowerCase()).not.toContain('rollout');
+  } finally {
+    server.close();
+  }
+});

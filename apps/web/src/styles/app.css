@@ -155,3 +155,4 @@ footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);font-si
 .demo-link{margin-left:6px;font-size:14px;color:var(--ink);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--accent);text-decoration-thickness:2px}
 .demo video{display:block;width:100%;aspect-ratio:16/9;background:#000;border-radius:var(--r-md);margin-top:10px}
 .simpler .margin{font-size:12.5px;color:var(--ink-muted);display:block}
+.demo-box{aspect-ratio:16/9;margin-top:10px;background:#000;border-radius:var(--r-md);overflow:hidden}.demo-box video{margin-top:0;border-radius:0;height:100%}

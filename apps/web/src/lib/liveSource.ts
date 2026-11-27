@@ -20,7 +20,7 @@ export interface Live {
 
 interface Payload {
   state: GuardState;
-  flagsmith?: { switchOff?: { requested: boolean; confirmed: boolean; detail: string }; results?: FlagsmithExperimentSummary };
+  flagsmith?: { mode?: string; note?: string; switchOff?: { requested: boolean; confirmed: boolean; detail: string }; results?: FlagsmithExperimentSummary };
   recent?: TraceVerdict[];
   timeline?: { atMs: number; text: string; failure?: boolean }[];
   records?: { id: string; label: string; openedAtMs: number }[];
@@ -80,6 +80,7 @@ export function connectLive(url: string, onBoard: (board: Board) => void, onDown
       ...(record ? { record } : {}),
       ...(liveRate ? { liveRate } : {}),
       ...(liveHistory.length ? { liveHistory } : {}),
+      ...(payload.flagsmith?.note ? { flagsmithNote: payload.flagsmith.note } : {}),
       ...(payload.flagsmith?.results ? { flagsmith: { atMs: payload.flagsmith.results.readAtMs, detail: '', data: payload.flagsmith.results } } : {}),
     });
   };

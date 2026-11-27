@@ -119,7 +119,7 @@ export function SimplerRules({ board, finished }: { board: BoardData; finished: 
         </span>
       </p>
       {board.state.notices?.map((n) => (
-        <p key={n.span} className="notice">
+        <p key={`${n.span}|${n.kind ?? ''}|${n.atMs}`} className="notice">
           <span>Notice: {n.text}</span>
         </p>
       ))}
@@ -284,7 +284,7 @@ export function FlagsmithNumbers({ board, small }: { board: BoardData; small?: b
           </p>
         </>
       ) : (
-        <p className="muted">Flagsmith's numbers show here once the experiment has results.</p>
+        <p className="muted">{board.flagsmithNote ?? "Flagsmith's numbers show here once the experiment has results."}</p>
       )}
     </div>
   );
@@ -309,7 +309,7 @@ export function Record({ board }: { board: BoardData }) {
           <h3>Notices</h3>
           <ul className="tl">
             {r.notices.map((n) => (
-              <li key={n.span}>
+              <li key={`${n.span}|${n.kind ?? ''}|${n.atMs}`}>
                 <b>{formatRelative(n.atMs - board.meta.startedAtMs)}</b>
                 {n.text}
               </li>

@@ -69,6 +69,8 @@ export interface Board {
   timeline: TimelineLine[];
   record?: InvestigationRecord;
   flagsmith?: RecordedResults;
+  /** Live only: the guard's own words when the flag is not in an experiment, so no experiment numbers exist. */
+  flagsmithNote?: string;
   /** Live only: requests seen in the last second. */
   liveRate?: { requests: number; failures: number };
   /** Live only: requests and failures in each of the last seconds, oldest first. */

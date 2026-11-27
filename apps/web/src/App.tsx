@@ -134,7 +134,7 @@ export function App() {
                 </div>
               ) : null}
               {board ? <WatchBand board={board} /> : null}
-              {board && !board.record && board.flagsmith && !params.record ? (
+              {board && !board.record && (board.flagsmith || board.flagsmithNote) && !params.record ? (
                 <div className="fsc-hero">
                   <FlagsmithNumbers board={board} small />
                 </div>
@@ -146,7 +146,7 @@ export function App() {
               <div className="board sk" style={{ minHeight: 560 }} aria-busy="true" aria-label="Loading the run" />
             )}
           </section>
-          {board && !board.record && board.flagsmith && !params.record ? (
+          {board && !board.record && (board.flagsmith || board.flagsmithNote) && !params.record ? (
             <div className="fsc-after">
               <FlagsmithNumbers board={board} small />
             </div>
