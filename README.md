@@ -4,7 +4,7 @@ Alibi switches a Flagsmith feature off only when the feature's own code is faili
 
 [![The database outage: 97 failures with the flag on, 0 counted, the flag stays on](docs/img/first-screen.png)](https://itssaharsh.github.io/alibi/)
 
-**[Live page](https://itssaharsh.github.io/alibi/)** (no sign-in; recorded runs replayed in your browser) · **[Demo video](https://itssaharsh.github.io/alibi/alibi-demo.mp4)** (2:50) · **[Run it yourself](#quickstart-run-it-yourself)** (three commands) · Track 03, Build on Open Source Flagsmith
+**[Live page](https://itssaharsh.github.io/alibi/)** (no sign-in; recorded runs replayed in your browser) · **[Demo video](https://youtu.be/3QC3_Y7ecWs)** (2:50, on YouTube; [the same file here](https://itssaharsh.github.io/alibi/alibi-demo.mp4)) · **[Run it yourself](#quickstart-run-it-yourself)** (three commands) · Track 03, Build on Open Source Flagsmith
 
 **In 24 runs whose scenarios and scoring were committed before any of them ran (outages of a shared service, of a service only the feature calls, a flaky database, bugs in the feature), Alibi made the right call 24 times. A rule that compares the two versions at a 20-point margin made it 17 times.** Three of those runs turn on what you call infrastructure: leave them out and it is 21 of 21 against 17 of 21; score them the other way and it is 21 against 20. On the 18 runs before these the two rules tie. [The numbers](#the-numbers-against-two-simpler-rules) say all of it.
 
