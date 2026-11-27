@@ -6,17 +6,22 @@ export const AUTHORS_RULE: readonly string[] = [
   "After switching off: if error rate and latency return to the previous stable version's level within 5 minutes, label it 'probably the feature', not proven, and open an investigation record with the traces. If they do not recover within 5 minutes, label it 'probably not the feature'. Either way a person investigates; the system never declares the cause on its own.",
 ];
 
+/** The three copyable blocks of "Plug it in". They are the README's own text; a test compares them with it. */
+export const START_COMMAND = 'docker compose -f deploy/docker-compose.yml up -d --build --wait';
+
 export const COLLECTOR_CONFIG = `exporters:
   otlphttp/alibi:
-    endpoint: http://localhost:4319
+    endpoint: http://alibi:4319
     encoding: json
 service:
   pipelines:
     traces:
-      exporters: [otlphttp/alibi]`;
+      exporters: [otlp/jaeger, otlphttp/alibi]`;
 
-export const SPAN_ATTRIBUTES = `feature_flag.key             = "checkout_v2"
-feature_flag.result.variant  = "v2"
-feature_flag.context.id      = "user-418"`;
+export const HELPER_SNIPPET = `const variation = await evaluateFlag({ flagsmith, flag: 'checkout_v2', userId, fallback: 'stable' });
+if (variation === 'v2') {
+  return runFlagged('checkout_v2', 'checkout_v2', () => newCheckout(cart));
+}
+return stableCheckout(cart);`;
 
 export const REPO_URL: string | undefined = (import.meta.env.VITE_REPO_URL as string | undefined) || undefined;

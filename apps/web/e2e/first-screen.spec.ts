@@ -280,3 +280,17 @@ test('a long run plays faster by default, and loading shows progress without fet
   await page.getByRole('button', { name: /^Replay the rare bug/ }).click();
   await expect(page.getByRole('button', { name: /Pause replay|Loading the run/ }).first()).toBeVisible();
 });
+
+test('"Plug it in" copies the real start command and fits without sideways scroll', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => undefined);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('./');
+    const plug = page.getByRole('region', { name: 'How to plug it in' });
+    await expect(plug).toContainText('docker compose -f deploy/docker-compose.yml up -d --build --wait');
+    const overflow = await plug.evaluate((el) => [...el.querySelectorAll('pre')].map((p) => p.scrollWidth - p.clientWidth));
+    expect(Math.max(...overflow)).toBeLessThanOrEqual(1);
+  }
+  await page.getByRole('button', { name: 'Copy command' }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('docker compose -f deploy/docker-compose.yml up -d --build --wait');
+});

@@ -4,7 +4,7 @@ import type { Rates } from '@alibi/core';
 import type { Board as BoardData, Tag } from '../lib/viewModel';
 import { outcomeOf, percent } from '../lib/viewModel';
 import type { Controller } from '../lib/useBoard';
-import { AUTHORS_RULE, COLLECTOR_CONFIG, REPO_URL, SPAN_ATTRIBUTES } from '../lib/copy';
+import { AUTHORS_RULE, COLLECTOR_CONFIG, HELPER_SNIPPET, REPO_URL, START_COMMAND } from '../lib/copy';
 import { classWords, ms, pct, ratesLine, rel, relMs, sig, simplerRules, simplerRulesShort, spanLabel, whyVerdict, type WhyTarget } from '../lib/format';
 import type { Scoreboard } from '../lib/scoreboard';
 import { videoUrl, type Figures } from '../lib/video';
@@ -573,14 +573,14 @@ export function PlugIn() {
           <Copy text={COLLECTOR_CONFIG} label="Copy config" />
         </div>
         <div>
-          <h3>Stamp each request with its flag.</h3>
-          <pre>{SPAN_ATTRIBUTES}</pre>
-          <Copy text={SPAN_ATTRIBUTES} label="Copy attributes" />
+          <h3>Put the flag's answer on the span, and run the feature inside a marked span.</h3>
+          <pre>{HELPER_SNIPPET}</pre>
+          <Copy text={HELPER_SNIPPET} label="Copy snippet" />
         </div>
         <div>
-          <h3>Start the example.</h3>
-          <pre>docker compose up</pre>
-          <Copy text="docker compose up" label="Copy command" />
+          <h3>Start the example, from the repository root.</h3>
+          <pre>{START_COMMAND}</pre>
+          <Copy text={START_COMMAND} label="Copy command" />
         </div>
       </div>
     </section>
