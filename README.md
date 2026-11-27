@@ -37,6 +37,18 @@ Alibi replays every run through two rules that need no traces, and shows what ea
 
 Read it honestly: on a real bug both simpler rules are faster than Alibi, which waits for 16 failures in the feature's own code. And an arm comparison with a wide enough margin gets all three decisions right. What it needs is that margin, picked in advance: during the outage both variations were failing, and with about 50 requests in each the gap between them reached 19 points on noise alone (at the moment the 10-point rule tripped, 18 of 46 against 19 of 66, the two-proportion p-value is 0.25). Alibi has no margin to pick, because it does not compare rates: each of the 97 failures says it failed in `pg.connect`. That is what reading the trace buys: the reason for every request, and a record that stops at "probably".
 
+### Repeated fifteen times
+
+One run is an anecdote, so each scenario was run five more times, each from a fresh stack. Every row of every run is in [`runs/repeats/README.md`](runs/repeats/README.md).
+
+| Scenario, 5 runs each | Alibi | Plain error-rate rule | Arm comparison, 10-point margin |
+|---|---|---|---|
+| The database outage | flag stayed on in 5 of 5: 0 counted, 82 to 99 failures with the flag on, every one a dependency failure | would have switched the healthy feature off in 5 of 5 | would have switched it off in 3 of 5 |
+| The coupon bug | switched off in 5 of 5, between +2:22 and +2:43; recovered and labelled "probably the feature" in 5 of 5 | 5 of 5, 33 to 47 seconds sooner than Alibi | 5 of 5, sooner than Alibi |
+| The slow host | switched off in 5 of 5; never recovered; "probably not the feature" in 5 of 5 | 5 of 5, 9 to 13 seconds sooner | 5 of 5, sooner |
+
+In all fifteen, replaying the recording through the engine reaches the same counts, switch-off and label as the live run did.
+
 ![The coupon bug at the moment the counter passes 15](docs/img/coupon-switch.png)
 
 ## For judges: see it in under a minute
@@ -242,7 +254,7 @@ Limits worth knowing before you rely on it:
 - **The count has no time window.** The rule says "more than 15 requests", so 16 failures spread over a day switch the flag off as surely as 16 in a minute. Re-arm Alibi when you start a rollout.
 - **A dependency that only the new code calls.** If it is down, those failures do not count, because the rule calls that infrastructure. Alibi raises a notice instead ("the stable version never makes this call, so a person should look"); it does not switch the flag off.
 - **It needs a stable arm.** The level that "recovered" is tested against comes from requests that got the stable version, so a flag that is on for everyone has nothing to compare with.
-- **Three runs are three runs.** They are recorded and replayable, not a study.
+- **Eighteen runs of one scripted shop.** They are recorded and repeatable, not a study of real traffic.
 
 ## Built with
 

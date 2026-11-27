@@ -1,0 +1,393 @@
+[
+  {
+    "scenario": "outage",
+    "run": 1,
+    "date": "2026-11-27T04:45:08.280Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 2600958,
+    "flagOnFailures": {
+      "dependency": 82
+    },
+    "stableFailures": {
+      "dependency": 97
+    },
+    "counted": 0,
+    "switchedOff": false,
+    "switchedOffAtS": null,
+    "recoveredAtS": null,
+    "label": null,
+    "plainRuleAtS": 71.8,
+    "armRuleAtS": null,
+    "largestArmGapPoints": 0,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0.5356,
+      "checkout_latency_ms": 0.7035
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  },
+  {
+    "scenario": "outage",
+    "run": 2,
+    "date": "2026-11-27T04:50:54.121Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 2612212,
+    "flagOnFailures": {
+      "dependency": 97
+    },
+    "stableFailures": {
+      "dependency": 82
+    },
+    "counted": 0,
+    "switchedOff": false,
+    "switchedOffAtS": null,
+    "recoveredAtS": null,
+    "label": null,
+    "plainRuleAtS": 70.8,
+    "armRuleAtS": 79.8,
+    "largestArmGapPoints": 15.5,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0.6951,
+      "checkout_latency_ms": 0.3744
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  },
+  {
+    "scenario": "outage",
+    "run": 3,
+    "date": "2026-11-27T04:56:33.547Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 2611841,
+    "flagOnFailures": {
+      "dependency": 99
+    },
+    "stableFailures": {
+      "dependency": 80
+    },
+    "counted": 0,
+    "switchedOff": false,
+    "switchedOffAtS": null,
+    "recoveredAtS": null,
+    "label": null,
+    "plainRuleAtS": 72.8,
+    "armRuleAtS": 174.9,
+    "largestArmGapPoints": 14,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0.2229,
+      "checkout_latency_ms": 0.0957
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  },
+  {
+    "scenario": "outage",
+    "run": 4,
+    "date": "2026-11-27T05:02:11.702Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 2612415,
+    "flagOnFailures": {
+      "dependency": 94
+    },
+    "stableFailures": {
+      "dependency": 85
+    },
+    "counted": 0,
+    "switchedOff": false,
+    "switchedOffAtS": null,
+    "recoveredAtS": null,
+    "label": null,
+    "plainRuleAtS": 71.8,
+    "armRuleAtS": null,
+    "largestArmGapPoints": 1.2,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0.3795,
+      "checkout_latency_ms": 0.395
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  },
+  {
+    "scenario": "outage",
+    "run": 5,
+    "date": "2026-11-27T05:07:48.836Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 2612305,
+    "flagOnFailures": {
+      "dependency": 97
+    },
+    "stableFailures": {
+      "dependency": 82
+    },
+    "counted": 0,
+    "switchedOff": false,
+    "switchedOffAtS": null,
+    "recoveredAtS": null,
+    "label": null,
+    "plainRuleAtS": 69.8,
+    "armRuleAtS": 69.8,
+    "largestArmGapPoints": 15.3,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0.234,
+      "checkout_latency_ms": 0.3332
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  },
+  {
+    "scenario": "coupon-bug",
+    "run": 1,
+    "date": "2026-11-27T05:13:27.823Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 5776748,
+    "flagOnFailures": {
+      "flagged-path": 17
+    },
+    "stableFailures": {},
+    "counted": 16,
+    "switchedOff": true,
+    "switchedOffAtS": 150.7,
+    "recoveredAtS": 210.9,
+    "label": "probably the feature",
+    "plainRuleAtS": 115.8,
+    "armRuleAtS": 115.8,
+    "largestArmGapPoints": 30.8,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0.0003,
+      "checkout_latency_ms": 0
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  },
+  {
+    "scenario": "coupon-bug",
+    "run": 2,
+    "date": "2026-11-27T05:24:04.784Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 5778552,
+    "flagOnFailures": {
+      "flagged-path": 16
+    },
+    "stableFailures": {},
+    "counted": 16,
+    "switchedOff": true,
+    "switchedOffAtS": 162.6,
+    "recoveredAtS": 222.9,
+    "label": "probably the feature",
+    "plainRuleAtS": 115.8,
+    "armRuleAtS": 115.8,
+    "largestArmGapPoints": 26.8,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0.0018,
+      "checkout_latency_ms": 0
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  },
+  {
+    "scenario": "coupon-bug",
+    "run": 3,
+    "date": "2026-11-27T05:34:41.426Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 5779939,
+    "flagOnFailures": {
+      "flagged-path": 16
+    },
+    "stableFailures": {},
+    "counted": 16,
+    "switchedOff": true,
+    "switchedOffAtS": 157.6,
+    "recoveredAtS": 217.9,
+    "label": "probably the feature",
+    "plainRuleAtS": 118,
+    "armRuleAtS": 118,
+    "largestArmGapPoints": 25,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0.0001,
+      "checkout_latency_ms": 0
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  },
+  {
+    "scenario": "coupon-bug",
+    "run": 4,
+    "date": "2026-11-27T05:45:18.124Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 5773849,
+    "flagOnFailures": {
+      "flagged-path": 17
+    },
+    "stableFailures": {},
+    "counted": 16,
+    "switchedOff": true,
+    "switchedOffAtS": 141.8,
+    "recoveredAtS": 201.9,
+    "label": "probably the feature",
+    "plainRuleAtS": 108.8,
+    "armRuleAtS": 108.8,
+    "largestArmGapPoints": 35.3,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0.0005,
+      "checkout_latency_ms": 0
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  },
+  {
+    "scenario": "coupon-bug",
+    "run": 5,
+    "date": "2026-11-27T05:55:54.863Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 5769163,
+    "flagOnFailures": {
+      "flagged-path": 16
+    },
+    "stableFailures": {},
+    "counted": 16,
+    "switchedOff": true,
+    "switchedOffAtS": 161.6,
+    "recoveredAtS": 221.9,
+    "label": "probably the feature",
+    "plainRuleAtS": 122.8,
+    "armRuleAtS": 119,
+    "largestArmGapPoints": 23.5,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0.0003,
+      "checkout_latency_ms": 0
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  },
+  {
+    "scenario": "degraded-host",
+    "run": 1,
+    "date": "2026-11-27T06:06:32.034Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 5761897,
+    "flagOnFailures": {
+      "flagged-path": 20
+    },
+    "stableFailures": {},
+    "counted": 16,
+    "switchedOff": true,
+    "switchedOffAtS": 111.6,
+    "recoveredAtS": null,
+    "label": "probably not the feature",
+    "plainRuleAtS": 103,
+    "armRuleAtS": 103,
+    "largestArmGapPoints": 100,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0,
+      "checkout_latency_ms": 0.0713
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  },
+  {
+    "scenario": "degraded-host",
+    "run": 2,
+    "date": "2026-11-27T06:17:09.328Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 5761585,
+    "flagOnFailures": {
+      "flagged-path": 20,
+      "server": 2
+    },
+    "stableFailures": {},
+    "counted": 16,
+    "switchedOff": true,
+    "switchedOffAtS": 111.4,
+    "recoveredAtS": null,
+    "label": "probably not the feature",
+    "plainRuleAtS": 100,
+    "armRuleAtS": 100,
+    "largestArmGapPoints": 100,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0,
+      "checkout_latency_ms": 0.1125
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  },
+  {
+    "scenario": "degraded-host",
+    "run": 3,
+    "date": "2026-11-27T06:27:45.880Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 5766940,
+    "flagOnFailures": {
+      "flagged-path": 20
+    },
+    "stableFailures": {
+      "server": 1
+    },
+    "counted": 16,
+    "switchedOff": true,
+    "switchedOffAtS": 109.7,
+    "recoveredAtS": null,
+    "label": "probably not the feature",
+    "plainRuleAtS": 97.8,
+    "armRuleAtS": 97.8,
+    "largestArmGapPoints": 99,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0,
+      "checkout_latency_ms": 0.2325
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  },
+  {
+    "scenario": "degraded-host",
+    "run": 4,
+    "date": "2026-11-27T06:38:22.729Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 5753706,
+    "flagOnFailures": {
+      "flagged-path": 20,
+      "dependency": 1,
+      "mixed": 1
+    },
+    "stableFailures": {},
+    "counted": 16,
+    "switchedOff": true,
+    "switchedOffAtS": 111.5,
+    "recoveredAtS": null,
+    "label": "probably not the feature",
+    "plainRuleAtS": 100.8,
+    "armRuleAtS": 98.8,
+    "largestArmGapPoints": 100,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0,
+      "checkout_latency_ms": 0.0727
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  },
+  {
+    "scenario": "degraded-host",
+    "run": 5,
+    "date": "2026-11-27T06:49:01.022Z",
+    "flagsmithVersion": "2.295.2",
+    "runFileBytes": 5763533,
+    "flagOnFailures": {
+      "flagged-path": 20,
+      "server": 1
+    },
+    "stableFailures": {},
+    "counted": 16,
+    "switchedOff": true,
+    "switchedOffAtS": 110.7,
+    "recoveredAtS": null,
+    "label": "probably not the feature",
+    "plainRuleAtS": 98,
+    "armRuleAtS": 98,
+    "largestArmGapPoints": 100,
+    "flagsmithChanceToWin": {
+      "checkout_completed": 0.0001,
+      "checkout_latency_ms": 0.1056
+    },
+    "flagsmithResultsRead": true,
+    "replayEqualsLive": true
+  }
+]
